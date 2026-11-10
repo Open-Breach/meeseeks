@@ -3,10 +3,14 @@
 
 use std::fmt;
 use std::os::fd::{AsRawFd, OwnedFd};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use gst::glib;
 use gst::prelude::*;
 use gtk::gdk;
+use gtk::gdk::prelude::PaintableExt;
 
 /// The size asked of the stream. On GNOME the virtual monitor takes whatever
 /// size the format negotiation settles on, so this is what makes it 1080p.
@@ -19,12 +23,17 @@ pub fn placeholder() -> gdk::Paintable {
     gdk::Paintable::new_empty(WIDTH, HEIGHT)
 }
 
+/// How often the frame rates go to the debug log, in seconds.
+const FRAME_LOG_INTERVAL: u32 = 5;
+
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
 /// the pipeline.
 pub struct Display {
     pipeline: gst::Pipeline,
     paintable: gdk::Paintable,
     _bus_watch: gst::bus::BusWatchGuard,
+    /// The timer behind the frame rate log, when debug logging is on.
+    frame_log: Option<glib::SourceId>,
     /// `pipewiresrc` only duplicates the descriptor once it connects, so ours
     /// has to stay open at least that long.
     _fd: OwnedFd,
@@ -63,7 +72,8 @@ impl Display {
             .build();
         src.link_filtered(&sink, &caps)?;
 
-        if let Some(pad) = sink.static_pad("sink") {
+        let sink_pad = sink.static_pad("sink");
+        if let Some(pad) = &sink_pad {
             pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, log_buffer_path);
         }
 
@@ -91,10 +101,15 @@ impl Display {
             glib::ControlFlow::Continue
         })?;
 
+        let frame_log = sink_pad
+            .filter(|_| log::log_enabled!(log::Level::Debug))
+            .map(|pad| log_frame_rates(&pad, &paintable));
+
         let display = Self {
             pipeline,
             paintable,
             _bus_watch: bus_watch,
+            frame_log,
             _fd: fd,
         };
         // On failure `display` is dropped here, which also takes the pipeline
@@ -111,6 +126,9 @@ impl Display {
 
 impl Drop for Display {
     fn drop(&mut self) {
+        if let Some(timer) = self.frame_log.take() {
+            timer.remove();
+        }
         let _ = self.pipeline.set_state(gst::State::Null);
     }
 }
@@ -139,6 +157,55 @@ fn log_buffer_path(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadPro
     let path = if dmabuf { "DMA-BUF" } else { "shared memory" };
     log::info!("buffer path: {path} ({caps})");
     gst::PadProbeReturn::Remove
+}
+
+#[derive(Default)]
+struct FrameCounters {
+    arrived: AtomicU64,
+    handed_on: AtomicU64,
+    last_arrival_us: AtomicU64,
+    longest_gap_us: AtomicU64,
+}
+
+/// Logs, every few seconds at debug level, how many frames a second arrive
+/// from PipeWire and how many of those the sink hands to GTK to draw. The
+/// first number low means the compositor sends few; the second lower than the
+/// first means this process is not keeping up.
+fn log_frame_rates(pad: &gst::Pad, paintable: &gdk::Paintable) -> glib::SourceId {
+    let counters = Arc::new(FrameCounters::default());
+    let started = Instant::now();
+
+    let arriving = counters.clone();
+    pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+        let now = started.elapsed().as_micros() as u64;
+        let last = arriving.last_arrival_us.swap(now, Ordering::Relaxed);
+        if last != 0 {
+            arriving
+                .longest_gap_us
+                .fetch_max(now - last, Ordering::Relaxed);
+        }
+        arriving.arrived.fetch_add(1, Ordering::Relaxed);
+        gst::PadProbeReturn::Ok
+    });
+
+    let handing_on = counters.clone();
+    paintable.connect_invalidate_contents(move |_| {
+        handing_on.handed_on.fetch_add(1, Ordering::Relaxed);
+    });
+
+    glib::timeout_add_seconds_local(FRAME_LOG_INTERVAL, move || {
+        let per_second = |count: &AtomicU64| {
+            count.swap(0, Ordering::Relaxed) as f64 / f64::from(FRAME_LOG_INTERVAL)
+        };
+        let arrived = per_second(&counters.arrived);
+        let handed_on = per_second(&counters.handed_on);
+        let gap_ms = counters.longest_gap_us.swap(0, Ordering::Relaxed) / 1000;
+        log::debug!(
+            "last {FRAME_LOG_INTERVAL} s: {arrived:.1} frames/s from PipeWire, \
+             longest gap {gap_ms} ms, {handed_on:.1} frames/s handed to GTK"
+        );
+        glib::ControlFlow::Continue
+    })
 }
 
 #[derive(Debug)]
