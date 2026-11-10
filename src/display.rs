@@ -13,6 +13,12 @@ use gtk::gdk;
 const WIDTH: i32 = 1920;
 const HEIGHT: i32 = 1080;
 
+/// An empty picture of the size the stream is asked to have, to stand in for
+/// it while nothing is running.
+pub fn placeholder() -> gdk::Paintable {
+    gdk::Paintable::new_empty(WIDTH, HEIGHT)
+}
+
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
 /// the pipeline.
 pub struct Display {

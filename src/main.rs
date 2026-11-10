@@ -7,8 +7,8 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::rc::Rc;
 
+use gtk::glib;
 use gtk::prelude::*;
-use gtk::{gdk, glib};
 
 use display::Display;
 use session::Session;
@@ -89,7 +89,7 @@ impl Shell {
             return;
         };
         self.button.set_sensitive(false);
-        self.picture.set_paintable(gdk::Paintable::NONE);
+        self.picture.set_paintable(Some(&display::placeholder()));
         drop(display);
 
         // Closing the window lands here too; keep the application alive
@@ -116,9 +116,12 @@ fn build_window(app: &gtk::Application) {
         .build();
 
     // Contain scales the picture to fit and keeps its aspect ratio; what is
-    // left over of the window stays empty.
+    // left over of the window stays empty. The placeholder gives the picture
+    // the monitor's size before there is a stream, and the window, which has
+    // no size of its own, opens just large enough to show it unscaled.
     let picture = gtk::Picture::builder()
         .content_fit(gtk::ContentFit::Contain)
+        .paintable(&display::placeholder())
         .build();
     // Lets GTK hand DMA-BUF frames to the compositor as they are.
     let offload = gtk::GraphicsOffload::builder()
@@ -134,8 +137,6 @@ fn build_window(app: &gtk::Application) {
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Meeseeks")
-        .default_width(960)
-        .default_height(600)
         .child(&content)
         .build();
 
