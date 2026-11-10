@@ -1,0 +1,11 @@
+[package]
+name = "meeseeks"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "A virtual monitor shown as a window, for sharing a sane-sized screen"
+
+[dependencies]
+# GtkGraphicsOffload, the widget that hands DMA-BUF frames to the compositor,
+# arrived in GTK 4.14.
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
