@@ -36,9 +36,6 @@ struct Tries {
     /// are in GTK's default state, and Mutter tags its stream as BT.709 with a
     /// gamma 2.2 curve, which is not.
     srgb: bool,
-    /// `fps=N`: ask for at most N frames a second. Mutter gives the virtual
-    /// monitor that refresh rate; without the request it is 60.
-    max_framerate: Option<i32>,
 }
 
 impl Tries {
@@ -52,11 +49,8 @@ impl Tries {
             .map(str::trim)
             .filter(|item| !item.is_empty())
         {
-            match item.split_once('=') {
-                None if item == "srgb" => tries.srgb = true,
-                Some(("fps", rate)) if rate.parse::<i32>().is_ok_and(|rate| rate > 0) => {
-                    tries.max_framerate = rate.parse().ok();
-                }
+            match item {
+                "srgb" => tries.srgb = true,
                 _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
             }
         }
@@ -105,14 +99,12 @@ impl Display {
 
         // Any caps features, so that the size is requested whether the sink
         // gets DMA-BUFs or plain memory.
-        let mut caps = gst::Caps::builder("video/x-raw")
+        let caps = gst::Caps::builder("video/x-raw")
             .any_features()
             .field("width", WIDTH)
-            .field("height", HEIGHT);
-        if let Some(rate) = tries.max_framerate {
-            caps = caps.field("max-framerate", gst::Fraction::new(rate, 1));
-        }
-        src.link_filtered(&sink, &caps.build())?;
+            .field("height", HEIGHT)
+            .build();
+        src.link_filtered(&sink, &caps)?;
 
         let sink_pad = sink.static_pad("sink");
         if let Some(pad) = &sink_pad {

@@ -159,9 +159,37 @@ fn build_window(app: &gtk::Application) {
     });
 
     window.present();
+
+    // Which renderer GTK chose decides how the frames get drawn, so say it.
+    if let Some(renderer) = window.renderer() {
+        log::info!("GTK draws with {}", renderer.type_().name());
+    }
+}
+
+/// Keeps GTK from drawing with Vulkan, its default on Wayland, so that it
+/// falls back to GL.
+///
+/// On the one GNOME machine this has run on, every session started within a
+/// minute or so of an earlier one stuttered at about 19 frames a second when
+/// GTK's Vulkan renderer drew the frames, and held 60 with the GL renderer.
+/// Why is not understood. Setting `GSK_RENDERER` in the environment overrides
+/// this, for comparing.
+fn keep_gtk_off_vulkan() {
+    if std::env::var_os("GSK_RENDERER").is_some() {
+        return;
+    }
+    let mut disabled = std::env::var("GDK_DISABLE").unwrap_or_default();
+    if !disabled.is_empty() {
+        disabled.push(',');
+    }
+    disabled.push_str("vulkan");
+    // SAFETY: this runs first thing in `main`, before any other thread exists
+    // that could be reading the environment.
+    unsafe { std::env::set_var("GDK_DISABLE", disabled) };
 }
 
 fn main() -> glib::ExitCode {
+    keep_gtk_off_vulkan();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let app = gtk::Application::builder().build();
