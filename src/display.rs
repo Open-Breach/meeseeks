@@ -3,8 +3,8 @@
 
 use std::fmt;
 use std::os::fd::{AsRawFd, OwnedFd};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gst::glib;
@@ -26,6 +26,45 @@ pub fn placeholder() -> gdk::Paintable {
 /// How often the frame rates go to the debug log, in seconds.
 const FRAME_LOG_INTERVAL: u32 = 5;
 
+/// Variations to compare while the smoothest configuration is being looked
+/// for. They are switched on by listing them in `MEESEEKS_TRY`, separated by
+/// commas. Temporary: the one that wins becomes the only path and this goes.
+#[derive(Default)]
+struct Tries {
+    /// `srgb`: tell the sink the frames are plain sRGB, whatever the stream
+    /// says. GTK only hands a frame to the compositor untouched if its colours
+    /// are in GTK's default state, and Mutter tags its stream as BT.709 with a
+    /// gamma 2.2 curve, which is not.
+    srgb: bool,
+    /// `fps=N`: ask for at most N frames a second. Mutter gives the virtual
+    /// monitor that refresh rate; without the request it is 60.
+    max_framerate: Option<i32>,
+}
+
+impl Tries {
+    fn from_env() -> Self {
+        let mut tries = Self::default();
+        let Ok(list) = std::env::var("MEESEEKS_TRY") else {
+            return tries;
+        };
+        for item in list
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+        {
+            match item.split_once('=') {
+                None if item == "srgb" => tries.srgb = true,
+                Some(("fps", rate)) if rate.parse::<i32>().is_ok_and(|rate| rate > 0) => {
+                    tries.max_framerate = rate.parse().ok();
+                }
+                _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
+            }
+        }
+        log::info!("trying: {list}");
+        tries
+    }
+}
+
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
 /// the pipeline.
 pub struct Display {
@@ -46,6 +85,7 @@ impl Display {
     /// the stream ends on its own. Must be called on the GTK main thread.
     pub fn new(fd: OwnedFd, node_id: u32, on_end: impl FnOnce() + 'static) -> Result<Self, Error> {
         gst::init()?;
+        let tries = Tries::from_env();
 
         // `path` is deprecated in favour of `target-object`, but that one
         // wants a node name or serial and the portal hands out the node id.
@@ -65,16 +105,22 @@ impl Display {
 
         // Any caps features, so that the size is requested whether the sink
         // gets DMA-BUFs or plain memory.
-        let caps = gst::Caps::builder("video/x-raw")
+        let mut caps = gst::Caps::builder("video/x-raw")
             .any_features()
             .field("width", WIDTH)
-            .field("height", HEIGHT)
-            .build();
-        src.link_filtered(&sink, &caps)?;
+            .field("height", HEIGHT);
+        if let Some(rate) = tries.max_framerate {
+            caps = caps.field("max-framerate", gst::Fraction::new(rate, 1));
+        }
+        src.link_filtered(&sink, &caps.build())?;
 
         let sink_pad = sink.static_pad("sink");
         if let Some(pad) = &sink_pad {
+            // In this order, so that the log shows what was negotiated.
             pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, log_buffer_path);
+            if tries.srgb {
+                pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, present_as_srgb);
+            }
         }
 
         let mut on_end = Some(on_end);
@@ -159,32 +205,78 @@ fn log_buffer_path(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadPro
     gst::PadProbeReturn::Remove
 }
 
+/// Rewrites the caps on their way into the sink so that they claim sRGB. The
+/// frames themselves are untouched; only what the sink believes about their
+/// colours changes.
+fn present_as_srgb(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadProbeReturn {
+    let rewritten = match &info.data {
+        Some(gst::PadProbeData::Event(event)) => match event.view() {
+            gst::EventView::Caps(caps_event) => {
+                let mut caps = caps_event.caps_owned();
+                for structure in caps.make_mut().iter_mut() {
+                    structure.set("colorimetry", "sRGB");
+                }
+                gst::event::Caps::builder(&caps)
+                    .seqnum(event.seqnum())
+                    .build()
+            }
+            _ => return gst::PadProbeReturn::Ok,
+        },
+        _ => return gst::PadProbeReturn::Ok,
+    };
+    info.data = Some(gst::PadProbeData::Event(rewritten));
+    gst::PadProbeReturn::Ok
+}
+
 #[derive(Default)]
 struct FrameCounters {
     arrived: AtomicU64,
     handed_on: AtomicU64,
     last_arrival_us: AtomicU64,
-    longest_gap_us: AtomicU64,
+    /// The time between each frame and the one before it, in microseconds,
+    /// since the last log line.
+    gaps_us: Mutex<Vec<u64>>,
+    /// Frames given to the sink that nothing has let go of yet. Each one
+    /// keeps a PipeWire buffer away from the compositor, which has few.
+    held: AtomicU64,
+    most_held: AtomicU64,
 }
 
-/// Logs, every few seconds at debug level, how many frames a second arrive
-/// from PipeWire and how many of those the sink hands to GTK to draw. The
-/// first number low means the compositor sends few; the second lower than the
-/// first means this process is not keeping up.
+/// Logs, every few seconds at debug level, what happens to the frames:
+///
+/// - how many a second arrive from PipeWire; low means the compositor sends
+///   few,
+/// - the median and the longest time between two of them,
+/// - how many a second the sink hands to GTK to draw; lower than the first
+///   number means this process is not keeping up,
+/// - the most buffers that were held at once; near the compositor's pool
+///   size means it is being starved from this end.
 fn log_frame_rates(pad: &gst::Pad, paintable: &gdk::Paintable) -> glib::SourceId {
     let counters = Arc::new(FrameCounters::default());
     let started = Instant::now();
 
     let arriving = counters.clone();
-    pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+    pad.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
         let now = started.elapsed().as_micros() as u64;
         let last = arriving.last_arrival_us.swap(now, Ordering::Relaxed);
         if last != 0 {
-            arriving
-                .longest_gap_us
-                .fetch_max(now - last, Ordering::Relaxed);
+            arriving.gaps_us.lock().unwrap().push(now - last);
         }
         arriving.arrived.fetch_add(1, Ordering::Relaxed);
+
+        if let Some(gst::PadProbeData::Buffer(buffer)) = &info.data {
+            let held = arriving.held.fetch_add(1, Ordering::Relaxed) + 1;
+            arriving.most_held.fetch_max(held, Ordering::Relaxed);
+            // SAFETY: the buffer is alive, and `frame_released` takes back
+            // the reference to the counters that is leaked here, exactly once.
+            unsafe {
+                gst::ffi::gst_mini_object_weak_ref(
+                    buffer.as_mut_ptr().cast(),
+                    Some(frame_released),
+                    Arc::into_raw(arriving.clone()).cast_mut().cast(),
+                );
+            }
+        }
         gst::PadProbeReturn::Ok
     });
 
@@ -199,13 +291,33 @@ fn log_frame_rates(pad: &gst::Pad, paintable: &gdk::Paintable) -> glib::SourceId
         };
         let arrived = per_second(&counters.arrived);
         let handed_on = per_second(&counters.handed_on);
-        let gap_ms = counters.longest_gap_us.swap(0, Ordering::Relaxed) / 1000;
+
+        let mut gaps = std::mem::take(&mut *counters.gaps_us.lock().unwrap());
+        gaps.sort_unstable();
+        let median_ms = gaps.get(gaps.len() / 2).map_or(0, |gap| gap / 1000);
+        let longest_ms = gaps.last().map_or(0, |gap| gap / 1000);
+
+        let held_now = counters.held.load(Ordering::Relaxed);
+        let most_held = counters.most_held.swap(held_now, Ordering::Relaxed);
+
         log::debug!(
             "last {FRAME_LOG_INTERVAL} s: {arrived:.1} frames/s from PipeWire, \
-             longest gap {gap_ms} ms, {handed_on:.1} frames/s handed to GTK"
+             gaps median {median_ms} ms and longest {longest_ms} ms, \
+             {handed_on:.1} frames/s handed to GTK, at most {most_held} buffers held"
         );
         glib::ControlFlow::Continue
     })
+}
+
+/// Called by GStreamer when the last reference to a frame's buffer is gone.
+unsafe extern "C" fn frame_released(
+    counters: glib::ffi::gpointer,
+    _buffer: *mut gst::ffi::GstMiniObject,
+) {
+    // SAFETY: `counters` is what `Arc::into_raw` returned when the weak
+    // reference was taken, and GStreamer calls this once for each.
+    let counters = unsafe { Arc::from_raw(counters.cast_const().cast::<FrameCounters>()) };
+    counters.held.fetch_sub(1, Ordering::Relaxed);
 }
 
 #[derive(Debug)]
