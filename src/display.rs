@@ -36,6 +36,13 @@ struct Tries {
     /// are in GTK's default state, and Mutter tags its stream as BT.709 with a
     /// gamma 2.2 curve, which is not.
     srgb: bool,
+    /// `copy`: have `pipewiresrc` copy every frame and give the compositor's
+    /// buffer straight back, instead of lending it out until GTK is done
+    /// with it. Mutter has 8 buffers and stops sending when none is free; this
+    /// takes the timing of GTK's renderer out of when they return. It costs
+    /// the DMA-BUF path: a copy only makes sense from shared memory, so only
+    /// that is asked for.
+    copy: bool,
 }
 
 impl Tries {
@@ -51,6 +58,7 @@ impl Tries {
         {
             match item {
                 "srgb" => tries.srgb = true,
+                "copy" => tries.copy = true,
                 _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
             }
         }
@@ -86,6 +94,7 @@ impl Display {
         let src = make("pipewiresrc")?;
         src.set_property("fd", fd.as_raw_fd());
         src.set_property("path", node_id.to_string());
+        src.set_property("always-copy", tries.copy);
 
         // Show every frame as it arrives instead of waiting on the clock for
         // its timestamp. There is no audio to stay in step with, and a frame
@@ -98,12 +107,16 @@ impl Display {
         pipeline.add_many([&src, &sink])?;
 
         // Any caps features, so that the size is requested whether the sink
-        // gets DMA-BUFs or plain memory.
+        // gets DMA-BUFs or plain memory. Without them the caps mean plain
+        // memory only.
         let caps = gst::Caps::builder("video/x-raw")
-            .any_features()
             .field("width", WIDTH)
-            .field("height", HEIGHT)
-            .build();
+            .field("height", HEIGHT);
+        let caps = if tries.copy {
+            caps.build()
+        } else {
+            caps.any_features().build()
+        };
         src.link_filtered(&sink, &caps)?;
 
         let sink_pad = sink.static_pad("sink");
