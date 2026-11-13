@@ -148,6 +148,15 @@ impl Display {
         filter.set_property("caps", &wanted);
 
         let pipeline = gst::Pipeline::new();
+        // Left to itself the pipeline takes the clock `pipewiresrc` offers.
+        // That clock falls behind when the compositor negotiates the stream
+        // anew after it has started, which Mutter does in some sessions; from
+        // then on `pipewiresrc` holds every frame back until its clock has
+        // caught up with the frame's timestamp, and a compositor with a
+        // pool of 8 buffers runs out of them. The compositor stamps its
+        // frames with the monotonic clock, which is what the system clock
+        // reads, so with that one a frame is never early.
+        pipeline.use_clock(Some(&gst::SystemClock::obtain()));
         pipeline.add_many([&src, &filter, &sink])?;
         gst::Element::link_many([&src, &filter, &sink])?;
 
