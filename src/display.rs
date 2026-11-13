@@ -1,11 +1,13 @@
 //! The GStreamer pipeline that turns a PipeWire video node into something GTK
 //! can paint. Knows nothing about portals.
 
+use std::cell::Cell;
 use std::fmt;
 use std::os::fd::{AsRawFd, OwnedFd};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gst::glib;
 use gst::prelude::*;
@@ -43,6 +45,13 @@ struct Tries {
     /// the DMA-BUF path: a copy only makes sense from shared memory, so only
     /// that is asked for.
     copy: bool,
+    /// `reconnect`: take the stream as shared memory for a moment, then
+    /// disconnect and connect again asking for what is really wanted. Every
+    /// stuttering session seen in Mutter's log had its stream renegotiated
+    /// after it had started, which Mutter does once per stream; a connection
+    /// made after that should be spared it. The first connection asks for
+    /// shared memory because that has drawn the renegotiation every time.
+    reconnect: bool,
 }
 
 impl Tries {
@@ -59,6 +68,7 @@ impl Tries {
             match item {
                 "srgb" => tries.srgb = true,
                 "copy" => tries.copy = true,
+                "reconnect" => tries.reconnect = true,
                 _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
             }
         }
@@ -66,6 +76,10 @@ impl Tries {
         tries
     }
 }
+
+/// How long the first connection is kept when trying `reconnect`. The
+/// renegotiation it waits for has been over well within a second.
+const RECONNECT_AFTER: Duration = Duration::from_secs(2);
 
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
 /// the pipeline.
@@ -75,6 +89,8 @@ pub struct Display {
     _bus_watch: gst::bus::BusWatchGuard,
     /// The timer behind the frame rate log, when debug logging is on.
     frame_log: Option<glib::SourceId>,
+    /// The timer behind `reconnect`, until it has fired.
+    reconnect: Rc<Cell<Option<glib::SourceId>>>,
     /// `pipewiresrc` only duplicates the descriptor once it connects, so ours
     /// has to stay open at least that long.
     _fd: OwnedFd,
@@ -103,21 +119,33 @@ impl Display {
         sink.set_property("sync", false);
         let paintable = sink.property::<gdk::Paintable>("paintable");
 
-        let pipeline = gst::Pipeline::new();
-        pipeline.add_many([&src, &sink])?;
-
-        // Any caps features, so that the size is requested whether the sink
-        // gets DMA-BUFs or plain memory. Without them the caps mean plain
-        // memory only.
-        let caps = gst::Caps::builder("video/x-raw")
-            .field("width", WIDTH)
-            .field("height", HEIGHT);
-        let caps = if tries.copy {
-            caps.build()
-        } else {
-            caps.any_features().build()
+        // The size is what is asked of the stream. With any caps features it
+        // is asked whether the sink gets DMA-BUFs or plain memory; without
+        // them the caps mean plain memory only.
+        let size = || {
+            gst::Caps::builder("video/x-raw")
+                .field("width", WIDTH)
+                .field("height", HEIGHT)
         };
-        src.link_filtered(&sink, &caps)?;
+        let plain_memory = size().build();
+        let wanted = if tries.copy {
+            plain_memory.clone()
+        } else {
+            size().any_features().build()
+        };
+        let filter = make("capsfilter")?;
+        filter.set_property(
+            "caps",
+            if tries.reconnect {
+                &plain_memory
+            } else {
+                &wanted
+            },
+        );
+
+        let pipeline = gst::Pipeline::new();
+        pipeline.add_many([&src, &filter, &sink])?;
+        gst::Element::link_many([&src, &filter, &sink])?;
 
         let sink_pad = sink.static_pad("sink");
         if let Some(pad) = &sink_pad {
@@ -156,11 +184,30 @@ impl Display {
             .filter(|_| log::log_enabled!(log::Level::Debug))
             .map(|pad| log_frame_rates(&pad, &paintable));
 
+        let reconnect = Rc::new(Cell::new(None));
+        if tries.reconnect {
+            let (pipeline, fired) = (pipeline.clone(), reconnect.clone());
+            let timer = glib::timeout_add_local(RECONNECT_AFTER, move || {
+                fired.set(None);
+                log::info!("reconnecting to the stream");
+                // `pipewiresrc` drops its connection to the stream when it
+                // negotiates afresh, which coming back up from READY makes it.
+                let _ = pipeline.set_state(gst::State::Ready);
+                filter.set_property("caps", &wanted);
+                if pipeline.set_state(gst::State::Playing).is_err() {
+                    log::error!("could not start the pipeline again");
+                }
+                glib::ControlFlow::Break
+            });
+            reconnect.set(Some(timer));
+        }
+
         let display = Self {
             pipeline,
             paintable,
             _bus_watch: bus_watch,
             frame_log,
+            reconnect,
             _fd: fd,
         };
         // On failure `display` is dropped here, which also takes the pipeline
@@ -180,6 +227,9 @@ impl Drop for Display {
         if let Some(timer) = self.frame_log.take() {
             timer.remove();
         }
+        if let Some(timer) = self.reconnect.take() {
+            timer.remove();
+        }
         let _ = self.pipeline.set_state(gst::State::Null);
     }
 }
@@ -190,9 +240,9 @@ fn make(factory: &'static str) -> Result<gst::Element, Error> {
         .map_err(|_| Error::MissingElement(factory))
 }
 
-/// Logs, once per pipeline, the kind of buffers the sink agreed to take: the
-/// first caps to reach it say so. DMA-BUFs are imported as they are; anything
-/// else is copied into a texture on the CPU.
+/// Logs the kind of buffers the sink agreed to take, each time caps reach it:
+/// once per start, and again if the stream is negotiated anew. DMA-BUFs are
+/// imported as they are; anything else is copied into a texture on the CPU.
 fn log_buffer_path(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadProbeReturn {
     let Some(gst::PadProbeData::Event(event)) = &info.data else {
         return gst::PadProbeReturn::Ok;
@@ -207,7 +257,7 @@ fn log_buffer_path(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadPro
         .is_some_and(|features| features.contains("memory:DMABuf"));
     let path = if dmabuf { "DMA-BUF" } else { "shared memory" };
     log::info!("buffer path: {path} ({caps})");
-    gst::PadProbeReturn::Remove
+    gst::PadProbeReturn::Ok
 }
 
 /// Rewrites the caps on their way into the sink so that they claim sRGB. The
