@@ -1,13 +1,11 @@
 //! The GStreamer pipeline that turns a PipeWire video node into something GTK
 //! can paint. Knows nothing about portals.
 
-use std::cell::Cell;
 use std::fmt;
 use std::os::fd::{AsRawFd, OwnedFd};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gst::glib;
 use gst::prelude::*;
@@ -45,13 +43,11 @@ struct Tries {
     /// the DMA-BUF path: a copy only makes sense from shared memory, so only
     /// that is asked for.
     copy: bool,
-    /// `reconnect`: take the stream as shared memory for a moment, then
-    /// disconnect and connect again asking for what is really wanted. Every
-    /// stuttering session seen in Mutter's log had its stream renegotiated
-    /// after it had started, which Mutter does once per stream; a connection
-    /// made after that should be spared it. The first connection asks for
-    /// shared memory because that has drawn the renegotiation every time.
-    reconnect: bool,
+    /// `fakesink`: end the pipeline in a `fakesink` instead of the GTK sink,
+    /// so that nothing is drawn and every buffer goes back to PipeWire as
+    /// soon as it has been counted. Shows whether the compositor still runs
+    /// out of buffers with a consumer that keeps none.
+    fakesink: bool,
 }
 
 impl Tries {
@@ -68,7 +64,7 @@ impl Tries {
             match item {
                 "srgb" => tries.srgb = true,
                 "copy" => tries.copy = true,
-                "reconnect" => tries.reconnect = true,
+                "fakesink" => tries.fakesink = true,
                 _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
             }
         }
@@ -77,20 +73,22 @@ impl Tries {
     }
 }
 
-/// How long the first connection is kept when trying `reconnect`. The
-/// renegotiation it waits for has been over well within a second.
-const RECONNECT_AFTER: Duration = Duration::from_secs(2);
+/// Whether `MEESEEKS_TRY` asks for `fakesink`, in which case there is no
+/// picture to show.
+pub fn fakesink_mode() -> bool {
+    std::env::var("MEESEEKS_TRY")
+        .is_ok_and(|list| list.split(',').any(|item| item.trim() == "fakesink"))
+}
 
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
 /// the pipeline.
 pub struct Display {
     pipeline: gst::Pipeline,
-    paintable: gdk::Paintable,
+    /// `None` when trying `fakesink`.
+    paintable: Option<gdk::Paintable>,
     _bus_watch: gst::bus::BusWatchGuard,
     /// The timer behind the frame rate log, when debug logging is on.
     frame_log: Option<glib::SourceId>,
-    /// The timer behind `reconnect`, until it has fired.
-    reconnect: Rc<Cell<Option<glib::SourceId>>>,
     /// `pipewiresrc` only duplicates the descriptor once it connects, so ours
     /// has to stay open at least that long.
     _fd: OwnedFd,
@@ -115,9 +113,18 @@ impl Display {
         // Show every frame as it arrives instead of waiting on the clock for
         // its timestamp. There is no audio to stay in step with, and a frame
         // judged late would otherwise be dropped.
-        let sink = make("gtk4paintablesink")?;
-        sink.set_property("sync", false);
-        let paintable = sink.property::<gdk::Paintable>("paintable");
+        let (sink, paintable) = if tries.fakesink {
+            let sink = make("fakesink")?;
+            sink.set_property("sync", false);
+            // It would otherwise keep the last buffer it was given.
+            sink.set_property("enable-last-sample", false);
+            (sink, None)
+        } else {
+            let sink = make("gtk4paintablesink")?;
+            sink.set_property("sync", false);
+            let paintable = sink.property::<gdk::Paintable>("paintable");
+            (sink, Some(paintable))
+        };
 
         // The size is what is asked of the stream. With any caps features it
         // is asked whether the sink gets DMA-BUFs or plain memory; without
@@ -127,21 +134,18 @@ impl Display {
                 .field("width", WIDTH)
                 .field("height", HEIGHT)
         };
-        let plain_memory = size().build();
-        let wanted = if tries.copy {
-            plain_memory.clone()
+        let wanted = if tries.fakesink {
+            // `fakesink` takes anything, so unlike the GTK sink it names no
+            // formats, and `pipewiresrc` cannot negotiate without one. BGRA
+            // in plain memory is what Mutter sends as shared memory.
+            size().field("format", "BGRA").build()
+        } else if tries.copy {
+            size().build()
         } else {
             size().any_features().build()
         };
         let filter = make("capsfilter")?;
-        filter.set_property(
-            "caps",
-            if tries.reconnect {
-                &plain_memory
-            } else {
-                &wanted
-            },
-        );
+        filter.set_property("caps", &wanted);
 
         let pipeline = gst::Pipeline::new();
         pipeline.add_many([&src, &filter, &sink])?;
@@ -180,34 +184,22 @@ impl Display {
             glib::ControlFlow::Continue
         })?;
 
-        let frame_log = sink_pad
+        // Frames are counted where they reach the sink, or, with nothing
+        // behind `fakesink` to hold them, where they leave the source.
+        let counted_pad = if tries.fakesink {
+            src.static_pad("src")
+        } else {
+            sink_pad
+        };
+        let frame_log = counted_pad
             .filter(|_| log::log_enabled!(log::Level::Debug))
-            .map(|pad| log_frame_rates(&pad, &paintable));
-
-        let reconnect = Rc::new(Cell::new(None));
-        if tries.reconnect {
-            let (pipeline, fired) = (pipeline.clone(), reconnect.clone());
-            let timer = glib::timeout_add_local(RECONNECT_AFTER, move || {
-                fired.set(None);
-                log::info!("reconnecting to the stream");
-                // `pipewiresrc` drops its connection to the stream when it
-                // negotiates afresh, which coming back up from READY makes it.
-                let _ = pipeline.set_state(gst::State::Ready);
-                filter.set_property("caps", &wanted);
-                if pipeline.set_state(gst::State::Playing).is_err() {
-                    log::error!("could not start the pipeline again");
-                }
-                glib::ControlFlow::Break
-            });
-            reconnect.set(Some(timer));
-        }
+            .map(|pad| log_frame_rates(&pad, paintable.as_ref()));
 
         let display = Self {
             pipeline,
             paintable,
             _bus_watch: bus_watch,
             frame_log,
-            reconnect,
             _fd: fd,
         };
         // On failure `display` is dropped here, which also takes the pipeline
@@ -216,18 +208,16 @@ impl Display {
         Ok(display)
     }
 
-    /// The picture. It has the stream's aspect ratio once frames arrive.
-    pub fn paintable(&self) -> &gdk::Paintable {
-        &self.paintable
+    /// The picture, unless trying `fakesink`. It has the stream's aspect
+    /// ratio once frames arrive.
+    pub fn paintable(&self) -> Option<&gdk::Paintable> {
+        self.paintable.as_ref()
     }
 }
 
 impl Drop for Display {
     fn drop(&mut self) {
         if let Some(timer) = self.frame_log.take() {
-            timer.remove();
-        }
-        if let Some(timer) = self.reconnect.take() {
             timer.remove();
         }
         let _ = self.pipeline.set_state(gst::State::Null);
@@ -306,7 +296,7 @@ struct FrameCounters {
 ///   number means this process is not keeping up,
 /// - the most buffers that were held at once; near the compositor's pool
 ///   size means it is being starved from this end.
-fn log_frame_rates(pad: &gst::Pad, paintable: &gdk::Paintable) -> glib::SourceId {
+fn log_frame_rates(pad: &gst::Pad, paintable: Option<&gdk::Paintable>) -> glib::SourceId {
     let counters = Arc::new(FrameCounters::default());
     let started = Instant::now();
 
@@ -335,10 +325,12 @@ fn log_frame_rates(pad: &gst::Pad, paintable: &gdk::Paintable) -> glib::SourceId
         gst::PadProbeReturn::Ok
     });
 
-    let handing_on = counters.clone();
-    paintable.connect_invalidate_contents(move |_| {
-        handing_on.handed_on.fetch_add(1, Ordering::Relaxed);
-    });
+    if let Some(paintable) = paintable {
+        let handing_on = counters.clone();
+        paintable.connect_invalidate_contents(move |_| {
+            handing_on.handed_on.fetch_add(1, Ordering::Relaxed);
+        });
+    }
 
     glib::timeout_add_seconds_local(FRAME_LOG_INTERVAL, move || {
         let per_second = |count: &AtomicU64| {

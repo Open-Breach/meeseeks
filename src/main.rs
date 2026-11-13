@@ -44,9 +44,9 @@ impl Shell {
         glib::spawn_future_local(async move {
             match shell.open().await {
                 Ok(running) => {
-                    shell
-                        .picture
-                        .set_paintable(Some(running.display.paintable()));
+                    if let Some(paintable) = running.display.paintable() {
+                        shell.picture.set_paintable(Some(paintable));
+                    }
                     shell.running.replace(Some(running));
                     shell.button.set_label("Stop");
                 }
@@ -132,7 +132,18 @@ fn build_window(app: &gtk::Application) {
 
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
     content.append(&button);
-    content.append(&offload);
+    if display::fakesink_mode() {
+        // Nothing is drawn in this mode, so there is no picture to show.
+        let label = gtk::Label::builder()
+            .label("fakesink mode")
+            .margin_start(24)
+            .margin_end(24)
+            .margin_bottom(12)
+            .build();
+        content.append(&label);
+    } else {
+        content.append(&offload);
+    }
 
     let window = gtk::ApplicationWindow::builder()
         .application(app)
