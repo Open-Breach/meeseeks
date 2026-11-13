@@ -180,11 +180,12 @@ fn build_window(app: &gtk::Application) {
 /// Keeps GTK from drawing with Vulkan, its default on Wayland, so that it
 /// falls back to GL.
 ///
-/// On the one GNOME machine this has run on, every session started within a
-/// minute or so of an earlier one stuttered at about 19 frames a second when
-/// GTK's Vulkan renderer drew the frames, and held 60 with the GL renderer.
-/// Why is not understood. Setting `GSK_RENDERER` in the environment overrides
-/// this, for comparing.
+/// This went in as a cure for the stutter, which it is not: sessions have
+/// stuttered with either renderer. What it does do, on the one GNOME machine
+/// this has run on, a laptop with a second GPU: GTK no longer wakes that GPU
+/// when the app starts, and the picture comes up as soon as the portal has
+/// answered instead of seconds later. Whether that is worth changing the
+/// environment for is undecided. Setting `GSK_RENDERER` overrides it.
 fn keep_gtk_off_vulkan() {
     if std::env::var_os("GSK_RENDERER").is_some() {
         return;
