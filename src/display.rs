@@ -12,17 +12,6 @@ use gst::prelude::*;
 use gtk::gdk;
 use gtk::gdk::prelude::PaintableExt;
 
-/// The size asked of the stream. On GNOME the virtual monitor takes whatever
-/// size the format negotiation settles on, so this is what makes it 1080p.
-const WIDTH: i32 = 1920;
-const HEIGHT: i32 = 1080;
-
-/// An empty picture of the size the stream is asked to have, to stand in for
-/// it while nothing is running.
-pub fn placeholder() -> gdk::Paintable {
-    gdk::Paintable::new_empty(WIDTH, HEIGHT)
-}
-
 /// How often the frame rates go to the debug log, in seconds.
 const FRAME_LOG_INTERVAL: u32 = 5;
 
@@ -75,9 +64,18 @@ pub struct Display {
 impl Display {
     /// Starts showing PipeWire node `node_id` of the remote behind `fd`.
     ///
+    /// `width` and `height` are the size asked of the stream. On GNOME the
+    /// virtual monitor takes whatever size the format negotiation settles
+    /// on, so this is what gives it its size.
+    ///
     /// `on_end` is called once, from the main loop, if the pipeline fails or
     /// the stream ends on its own. Must be called on the GTK main thread.
-    pub fn new(fd: OwnedFd, node_id: u32, on_end: impl FnOnce() + 'static) -> Result<Self, Error> {
+    pub fn new(
+        fd: OwnedFd,
+        node_id: u32,
+        (width, height): (i32, i32),
+        on_end: impl FnOnce() + 'static,
+    ) -> Result<Self, Error> {
         gst::init()?;
         let tries = Tries::from_env();
 
@@ -97,8 +95,8 @@ impl Display {
         // The size is what is asked of the stream. Any caps features, so that
         // the sink's DMA-BUF caps pass as well as its plain memory ones.
         let wanted = gst::Caps::builder("video/x-raw")
-            .field("width", WIDTH)
-            .field("height", HEIGHT)
+            .field("width", width)
+            .field("height", height)
             .any_features()
             .build();
         let filter = make("capsfilter")?;

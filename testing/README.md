@@ -35,12 +35,15 @@ takes everything down again.
 
 | Test | What it shows |
 | --- | --- |
-| `tests/loop.sh` | Start, resize, Stop, Start again, close the window while running. Look for the portal conversation (`SelectSources {'types': 4, 'multiple': 0, 'cursor_mode': 2}`), one `Session.Close` per session, the `buffer path` line and exit status 0. Screenshots of each stage are in `out/` |
+| `tests/loop.sh` | Start, Stop, Start again, close the window while running. Look for the portal conversation (`SelectSources {'types': 4, 'multiple': 0, 'cursor_mode': 2}`), one `Session.Close` per session, the `buffer path` line and exit status 0. Screenshots of each stage are in `out/` |
 | `tests/checks.sh <case>` | The startup checks. `ok`: no dialog, the main window. `no-sink`, `no-portal`, `no-virtual`, `no-pipewire`, `x11`: the dialog with that check failing, the same list in the log, and exit after Close. `x11` runs the app on sway's Xwayland with the environment of an X11 session and needs `xwayland`; it is not an X11 desktop |
 | `tests/failures.sh <case>` | A declined dialog, the window closed while the dialog is open, the stream taken away, a dead PipeWire remote. With `bad-fd` and `not-a-remote` the window freezes, which is a known limitation |
-| `tests/window-size.sh 2560x1440` | The window opens with the picture area at exactly 1920×1080 and the picture is drawn pixel for pixel. Of the eight pixels it reads, the first two are the picture's white edge, the next two its gradient, the next two the white edge again, and the last two lie just outside the picture |
+| `tests/resolution.sh 3440x1440` | The selector on an output of that size: in `out/resolution-idle.png`, the screen's size and which presets are greyed out. Then a preset and a custom size are each started; look for the producer's `negotiated size` lines. A size too large for the output brings the warning and a window scaled down to the room there is. After a restart the window has the size last started, from the settings file it prints. A second argument sets the output's scale |
+| `tests/window-size.sh 2560x1440 [locked\|unlocked]` | The area under the title bar is exactly 1920×1080 and the picture is drawn pixel for pixel. Of the eight pixels it reads, the first two are the picture's white edge, the next two its gradient, the next two the white edge again, and the last two lie just outside the picture. Then sway is asked to shrink the window: locked, the picture still runs on past the frame sway drew; unlocked, it is scaled into it |
 | `tests/size-control.sh` | The control for that: a consumer that asks for no size gets 1280×720 from the same producer |
 | `tests/frame-rate.sh <ms or none> <seconds>` | Frame rates against a producer set up like Mutter's virtual monitor, which renegotiates the stream that many milliseconds after the start. Look for about 60 frames a second in the app's log and no ticks without a free buffer in the producer's |
+
+The app's settings file is kept in the run's own directory, so every test starts from the defaults.
 
 Variables: `APP` is the binary to test (default `target/debug/meeseeks`),
 `PYTHON` a Python that has the distribution's `dbus` and `gi` modules (default

@@ -16,7 +16,9 @@ A Linux app that creates a virtual monitor through the XDG ScreenCast portal and
 
 - `src/session.rs` — the portal session: ScreenCast, source type Virtual, cursor mode Embedded, returns the PipeWire fd and node id. No GTK or GStreamer imports.
 - `src/display.rs` — the GStreamer pipeline and the paintable it exposes. No portal imports.
-- `src/main.rs` — one GTK 4 window: Start/Stop button and the picture. Runs the startup checks first.
+- `src/main.rs` — one GTK 4 window: the resolution selector while idle, the picture and a Stop button in the title bar while running. Runs the startup checks first.
+- `src/selector.rs` — the resolution selector: presets, custom size, fit check, Start button.
+- `src/settings.rs` — the settings file, `~/.config/meeseeks/settings.toml`. No GTK imports.
 - `src/checks.rs` — the startup checks, one small function each. `src/checks_dialog.rs` — the dialog that lists them when one fails.
 - `src/renderer.rs` — which GTK renderer is asked for, through GTK's environment variables.
 

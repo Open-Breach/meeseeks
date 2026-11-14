@@ -699,6 +699,8 @@ dependencies = [
  "gstreamer",
  "gtk4",
  "log",
+ "serde",
+ "toml",
 ]
 
 [[package]]

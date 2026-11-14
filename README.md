@@ -30,7 +30,9 @@ cargo run
 
 If the system lacks something the app needs, a dialog lists what instead of the window; the same list goes to the terminal.
 
-Press **Start** and approve the portal's dialog. The desktop should gain a second, 1920×1080 monitor, and the window shows what is on it. Move windows there with the mouse or Super+Shift+Arrow. **Stop**, or closing the window, removes the monitor again.
+The window opens with a choice of sizes for the virtual monitor: presets, or a width and height of your own. Presets that do not fit on your screen are greyed out. Press **Start** and approve the portal's dialog. The desktop should gain a second monitor of the chosen size, and the window shows what is on it, pixel for pixel. Move windows there with the mouse or Super+Shift+Arrow. **Stop** in the title bar, or closing the window, removes the monitor again.
+
+The size last used is kept in `~/.config/meeseeks/settings.toml` and chosen again on the next start. The window cannot be resized, so that the picture stays unscaled. With `lock_window_size = false` in that file it can, which scales the picture and leaves the monitor as it is.
 
 On every start the terminal prints one `buffer path:` line: `DMA-BUF` means frames reach the window without a CPU copy, `shared memory` means each one is copied.
 

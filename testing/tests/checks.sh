@@ -43,7 +43,7 @@ echo "windows: $(window_titles)"
 shot "checks-$1"
 if [ "$1" != ok ]; then
   echo "== press Close"
-  wtype -s 500 -k space -s 500
+  keys -k space; sleep 0.5
 else
   close_window
 fi

@@ -8,6 +8,11 @@ OUT=$T/out
 APP=${APP:-$T/../target/debug/meeseeks}
 PYTHON=${PYTHON:-python3}
 
+# The app's settings file goes where the run's other files are, so that it
+# starts from the defaults and leaves the machine's own settings alone.
+export XDG_CONFIG_HOME=$XDG_RUNTIME_DIR/config
+SETTINGS=$XDG_CONFIG_HOME/meeseeks/settings.toml
+
 # The headless compositor has no GPU.
 export GSK_RENDERER=${GSK_RENDERER:-cairo}
 # A gtk4paintablesink built by hand, where the distribution packages none.
@@ -52,10 +57,24 @@ def walk(n):
 print(" | ".join(walk(json.load(sys.stdin))))'
 }
 
-# Presses the Start/Stop button. The headless seat has no devices, so this
-# goes through a virtual keyboard: Tab focuses the button, space activates it.
-# The pauses let the app bind the keyboard before the keys are sent.
-press_button() { wtype -s 500 -k Tab -s 200 -k space -s 200; }
+# Presses Start, or Stop while a monitor is running. The headless seat has no
+# devices, so this goes through a virtual keyboard: the app keeps the focus on
+# the one of the two that can be pressed, and space activates it.
+press_button() { keys -k space; }
+
+# Sends keys, given the way wtype takes them. Every call is a new keyboard to
+# the app, and a key sent before the app has taken that in is lost.
+keys() { wtype -s 500 "$@" -s 200; }
+
+# Types a custom size into the selector's two fields. Start has to have the
+# focus, and has it again afterwards.
+type_size() { keys -M shift -k Tab -k Tab -m shift -s 200 "$1" -k Tab -s 200 "$2" -k Tab; }
+
+# Writes the app's settings file from the lines given, one key = value each.
+write_settings() {
+  mkdir -p "$(dirname "$SETTINGS")"
+  printf '%s\n' "$@" > "$SETTINGS"
+}
 
 # Closes the window the way a click on its close button would.
 close_window() { swaymsg -q '[title="Meeseeks"] kill'; }
