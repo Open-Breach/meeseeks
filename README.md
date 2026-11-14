@@ -28,6 +28,8 @@ Then, from a checkout:
 cargo run
 ```
 
+If the system lacks something the app needs, a dialog lists what instead of the window; the same list goes to the terminal.
+
 Press **Start** and approve the portal's dialog. The desktop should gain a second, 1920×1080 monitor, and the window shows what is on it. Move windows there with the mouse or Super+Shift+Arrow. **Stop**, or closing the window, removes the monitor again.
 
 On every start the terminal prints one `buffer path:` line: `DMA-BUF` means frames reach the window without a CPU copy, `shared memory` means each one is copied.

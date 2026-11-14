@@ -40,6 +40,18 @@ def walk(n):
 walk(json.load(sys.stdin)); sys.exit(1)'
 }
 
+# Prints the titles of all windows, separated by " | ".
+window_titles() {
+  swaymsg -t get_tree | "$PYTHON" -c '
+import json, sys
+def walk(n):
+    if n.get("pid") and n.get("name"):
+        yield n["name"]
+    for c in n.get("nodes", []) + n.get("floating_nodes", []):
+        yield from walk(c)
+print(" | ".join(walk(json.load(sys.stdin))))'
+}
+
 # Presses the Start/Stop button. The headless seat has no devices, so this
 # goes through a virtual keyboard: Tab focuses the button, space activates it.
 # The pauses let the app bind the keyboard before the keys are sent.

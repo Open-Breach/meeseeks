@@ -1,6 +1,10 @@
-//! The shell: one GTK 4 window with a Start/Stop button and the picture.
+//! The shell: one GTK 4 window with a Start/Stop button and the picture,
+//! opened once the startup checks have passed.
 
+mod checks;
+mod checks_dialog;
 mod display;
+mod renderer;
 mod session;
 
 use std::cell::RefCell;
@@ -11,6 +15,7 @@ use gtk::glib;
 use gtk::prelude::*;
 
 use display::Display;
+use renderer::Renderer;
 use session::Session;
 
 /// A started virtual monitor: the portal session that keeps it alive and the
@@ -166,34 +171,38 @@ fn build_window(app: &gtk::Application) {
     }
 }
 
-/// Keeps GTK from drawing with Vulkan, its default on Wayland, so that it
-/// falls back to GL.
-///
-/// This went in as a cure for the stutter, which it is not: sessions have
-/// stuttered with either renderer. It stays for what it does do, on the one
-/// GNOME machine this has run on, a laptop with a second GPU: GTK no longer
-/// wakes that GPU when the app starts, and the picture comes up as soon as
-/// the portal has answered instead of seconds later. Setting `GSK_RENDERER`
-/// overrides it.
-fn keep_gtk_off_vulkan() {
-    if std::env::var_os("GSK_RENDERER").is_some() {
-        return;
-    }
-    let mut disabled = std::env::var("GDK_DISABLE").unwrap_or_default();
-    if !disabled.is_empty() {
-        disabled.push(',');
-    }
-    disabled.push_str("vulkan");
-    // SAFETY: this runs first thing in `main`, before any other thread exists
-    // that could be reading the environment.
-    unsafe { std::env::set_var("GDK_DISABLE", disabled) };
+/// Runs the startup checks and opens the main window, or, if one of them
+/// fails, the dialog that shows them all. `asked` is the renderer GTK has been
+/// asked for.
+fn activate(app: &gtk::Application, asked: Option<Renderer>) {
+    // There is no window yet to keep the application alive.
+    let hold = app.hold();
+    let app = app.clone();
+    glib::spawn_future_local(async move {
+        let checks = checks::run(asked).await;
+        if checks::failed(&checks) {
+            eprint!("{}", checks::report(&checks));
+            checks_dialog::show(&app, &checks);
+        } else {
+            for check in &checks {
+                match (check.status, &check.hint) {
+                    (checks::Status::Warn, Some(hint)) => log::warn!("{}: {hint}", check.name),
+                    _ => log::debug!("check passed: {}", check.name),
+                }
+            }
+            build_window(&app);
+        }
+        drop(hold);
+    });
 }
 
 fn main() -> glib::ExitCode {
-    keep_gtk_off_vulkan();
+    // SAFETY: this runs first thing in `main`, before any other thread exists
+    // that could be reading the environment.
+    let asked = unsafe { renderer::request(Renderer::default()) };
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let app = gtk::Application::builder().build();
-    app.connect_activate(build_window);
+    app.connect_activate(move |app| activate(app, asked));
     app.run()
 }
