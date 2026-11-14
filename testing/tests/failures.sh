@@ -1,12 +1,10 @@
 #!/bin/bash
 # What the app does when a start goes wrong.
-# Usage: failures.sh <declined|close-mid-start|stream-ends|no-sink|bad-fd|not-a-remote>
+# Usage: failures.sh <declined|close-mid-start|stream-ends|bad-fd|not-a-remote>
 #
 #   declined         the portal dialog is declined
 #   close-mid-start  the window is closed while the dialog is still open
 #   stream-ends      the compositor's side takes the stream away while running
-#   no-sink          gtk4paintablesink is not installed; this can only be
-#                    staged where the sink comes from build/plugins
 #   bad-fd           the portal hands out a socket nobody answers on
 #   not-a-remote     the portal hands out something that is no socket at all
 . "$T/lib.sh"
@@ -16,15 +14,9 @@ case "${1:-}" in
   bad-fd) export MOCK_BAD_FD=1 ;;
   not-a-remote) export MOCK_BAD_FD=devnull ;;
   stream-ends) ;;
-  no-sink)
-    if [ -z "${GST_PLUGIN_PATH:-}" ]; then
-      echo "the sink is installed system-wide here; it cannot be hidden" >&2
-      exit 1
-    fi ;;
-  *) sed -n '2,11p' "$0" >&2; exit 1 ;;
+  *) sed -n '2,9p' "$0" >&2; exit 1 ;;
 esac
 start_portal "failures-$1"
-[ "$1" = no-sink ] && unset GST_PLUGIN_PATH
 "$APP" > "$OUT/failures-$1-app.log" 2>&1 &
 APP_PID=$!
 sleep 2

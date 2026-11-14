@@ -7,6 +7,8 @@ virtual monitor, starts a test producer. Everything it is asked is printed, so
 a test can check what the app sent.
 
 MOCK_PRODUCER=<path> is the producer to start; it has to print "node id: <n>".
+MOCK_SOURCE_TYPES=<bits> is what AvailableSourceTypes says; the default is 7,
+which is monitor, window and virtual.
 MOCK_START_RESPONSE=1 makes Start answer "cancelled", as a declined dialog does.
 MOCK_START_DELAY=<seconds> holds the answer to Start back, as an open dialog does.
 MOCK_BAD_FD=1 hands out a socket nobody answers on instead of the PipeWire
@@ -110,7 +112,7 @@ class ScreenCast(WithProperties):
     properties = {
         SCREENCAST: {
             "version": dbus.UInt32(5),
-            "AvailableSourceTypes": dbus.UInt32(1 | 2 | 4),
+            "AvailableSourceTypes": dbus.UInt32(int(os.environ.get("MOCK_SOURCE_TYPES", 1 | 2 | 4))),
             "AvailableCursorModes": dbus.UInt32(1 | 2 | 4),
         }
     }

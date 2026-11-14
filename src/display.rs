@@ -12,17 +12,6 @@ use gst::prelude::*;
 use gtk::gdk;
 use gtk::gdk::prelude::PaintableExt;
 
-/// The size asked of the stream. On GNOME the virtual monitor takes whatever
-/// size the format negotiation settles on, so this is what makes it 1080p.
-const WIDTH: i32 = 1920;
-const HEIGHT: i32 = 1080;
-
-/// An empty picture of the size the stream is asked to have, to stand in for
-/// it while nothing is running.
-pub fn placeholder() -> gdk::Paintable {
-    gdk::Paintable::new_empty(WIDTH, HEIGHT)
-}
-
 /// How often the frame rates go to the debug log, in seconds.
 const FRAME_LOG_INTERVAL: u32 = 5;
 
@@ -36,6 +25,12 @@ struct Tries {
     /// are in GTK's default state, and Mutter tags its stream as BT.709 with a
     /// gamma 2.2 curve, which is not.
     srgb: bool,
+    /// `copy`: ask for the frames in shared memory only, never as DMA-BUFs.
+    /// Frames in shared memory are copied as they arrive, see
+    /// `settle_buffer_path`, so the compositor has each buffer straight back
+    /// and GTK draws from memory of its own. It costs the zero-copy path;
+    /// it is for systems where that one misbehaves.
+    copy: bool,
 }
 
 impl Tries {
@@ -51,6 +46,7 @@ impl Tries {
         {
             match item {
                 "srgb" => tries.srgb = true,
+                "copy" => tries.copy = true,
                 _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
             }
         }
@@ -75,9 +71,18 @@ pub struct Display {
 impl Display {
     /// Starts showing PipeWire node `node_id` of the remote behind `fd`.
     ///
+    /// `width` and `height` are the size asked of the stream. On GNOME the
+    /// virtual monitor takes whatever size the format negotiation settles
+    /// on, so this is what gives it its size.
+    ///
     /// `on_end` is called once, from the main loop, if the pipeline fails or
     /// the stream ends on its own. Must be called on the GTK main thread.
-    pub fn new(fd: OwnedFd, node_id: u32, on_end: impl FnOnce() + 'static) -> Result<Self, Error> {
+    pub fn new(
+        fd: OwnedFd,
+        node_id: u32,
+        (width, height): (i32, i32),
+        on_end: impl FnOnce() + 'static,
+    ) -> Result<Self, Error> {
         gst::init()?;
         let tries = Tries::from_env();
 
@@ -94,13 +99,17 @@ impl Display {
         sink.set_property("sync", false);
         let paintable = sink.property::<gdk::Paintable>("paintable");
 
-        // The size is what is asked of the stream. Any caps features, so that
-        // the sink's DMA-BUF caps pass as well as its plain memory ones.
+        // The size is what is asked of the stream. With any caps features the
+        // sink's DMA-BUF caps pass as well as its plain memory ones; without
+        // them the caps mean plain memory only.
         let wanted = gst::Caps::builder("video/x-raw")
-            .field("width", WIDTH)
-            .field("height", HEIGHT)
-            .any_features()
-            .build();
+            .field("width", width)
+            .field("height", height);
+        let wanted = if tries.copy {
+            wanted.build()
+        } else {
+            wanted.any_features().build()
+        };
         let filter = make("capsfilter")?;
         filter.set_property("caps", &wanted);
 
