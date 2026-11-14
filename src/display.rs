@@ -26,9 +26,9 @@ pub fn placeholder() -> gdk::Paintable {
 /// How often the frame rates go to the debug log, in seconds.
 const FRAME_LOG_INTERVAL: u32 = 5;
 
-/// Variations to compare while the smoothest configuration is being looked
-/// for. They are switched on by listing them in `MEESEEKS_TRY`, separated by
-/// commas. Temporary: the one that wins becomes the only path and this goes.
+/// Variations still to be decided on. They are switched on by listing them in
+/// `MEESEEKS_TRY`, separated by commas. Temporary: once decided, a variation
+/// either becomes the only path or goes.
 #[derive(Default)]
 struct Tries {
     /// `srgb`: tell the sink the frames are plain sRGB, whatever the stream
@@ -36,18 +36,6 @@ struct Tries {
     /// are in GTK's default state, and Mutter tags its stream as BT.709 with a
     /// gamma 2.2 curve, which is not.
     srgb: bool,
-    /// `copy`: have `pipewiresrc` copy every frame and give the compositor's
-    /// buffer straight back, instead of lending it out until GTK is done
-    /// with it. Mutter has 8 buffers and stops sending when none is free; this
-    /// takes the timing of GTK's renderer out of when they return. It costs
-    /// the DMA-BUF path: a copy only makes sense from shared memory, so only
-    /// that is asked for.
-    copy: bool,
-    /// `fakesink`: end the pipeline in a `fakesink` instead of the GTK sink,
-    /// so that nothing is drawn and every buffer goes back to PipeWire as
-    /// soon as it has been counted. Shows whether the compositor still runs
-    /// out of buffers with a consumer that keeps none.
-    fakesink: bool,
 }
 
 impl Tries {
@@ -63,8 +51,6 @@ impl Tries {
         {
             match item {
                 "srgb" => tries.srgb = true,
-                "copy" => tries.copy = true,
-                "fakesink" => tries.fakesink = true,
                 _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
             }
         }
@@ -73,19 +59,11 @@ impl Tries {
     }
 }
 
-/// Whether `MEESEEKS_TRY` asks for `fakesink`, in which case there is no
-/// picture to show.
-pub fn fakesink_mode() -> bool {
-    std::env::var("MEESEEKS_TRY")
-        .is_ok_and(|list| list.split(',').any(|item| item.trim() == "fakesink"))
-}
-
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
 /// the pipeline.
 pub struct Display {
     pipeline: gst::Pipeline,
-    /// `None` when trying `fakesink`.
-    paintable: Option<gdk::Paintable>,
+    paintable: gdk::Paintable,
     _bus_watch: gst::bus::BusWatchGuard,
     /// The timer behind the frame rate log, when debug logging is on.
     frame_log: Option<glib::SourceId>,
@@ -108,42 +86,21 @@ impl Display {
         let src = make("pipewiresrc")?;
         src.set_property("fd", fd.as_raw_fd());
         src.set_property("path", node_id.to_string());
-        src.set_property("always-copy", tries.copy);
 
         // Show every frame as it arrives instead of waiting on the clock for
         // its timestamp. There is no audio to stay in step with, and a frame
         // judged late would otherwise be dropped.
-        let (sink, paintable) = if tries.fakesink {
-            let sink = make("fakesink")?;
-            sink.set_property("sync", false);
-            // It would otherwise keep the last buffer it was given.
-            sink.set_property("enable-last-sample", false);
-            (sink, None)
-        } else {
-            let sink = make("gtk4paintablesink")?;
-            sink.set_property("sync", false);
-            let paintable = sink.property::<gdk::Paintable>("paintable");
-            (sink, Some(paintable))
-        };
+        let sink = make("gtk4paintablesink")?;
+        sink.set_property("sync", false);
+        let paintable = sink.property::<gdk::Paintable>("paintable");
 
-        // The size is what is asked of the stream. With any caps features it
-        // is asked whether the sink gets DMA-BUFs or plain memory; without
-        // them the caps mean plain memory only.
-        let size = || {
-            gst::Caps::builder("video/x-raw")
-                .field("width", WIDTH)
-                .field("height", HEIGHT)
-        };
-        let wanted = if tries.fakesink {
-            // `fakesink` takes anything, so unlike the GTK sink it names no
-            // formats, and `pipewiresrc` cannot negotiate without one. BGRA
-            // in plain memory is what Mutter sends as shared memory.
-            size().field("format", "BGRA").build()
-        } else if tries.copy {
-            size().build()
-        } else {
-            size().any_features().build()
-        };
+        // The size is what is asked of the stream. Any caps features, so that
+        // the sink's DMA-BUF caps pass as well as its plain memory ones.
+        let wanted = gst::Caps::builder("video/x-raw")
+            .field("width", WIDTH)
+            .field("height", HEIGHT)
+            .any_features()
+            .build();
         let filter = make("capsfilter")?;
         filter.set_property("caps", &wanted);
 
@@ -193,16 +150,9 @@ impl Display {
             glib::ControlFlow::Continue
         })?;
 
-        // Frames are counted where they reach the sink, or, with nothing
-        // behind `fakesink` to hold them, where they leave the source.
-        let counted_pad = if tries.fakesink {
-            src.static_pad("src")
-        } else {
-            sink_pad
-        };
-        let frame_log = counted_pad
+        let frame_log = sink_pad
             .filter(|_| log::log_enabled!(log::Level::Debug))
-            .map(|pad| log_frame_rates(&pad, paintable.as_ref()));
+            .map(|pad| log_frame_rates(&pad, &paintable));
 
         let display = Self {
             pipeline,
@@ -217,10 +167,9 @@ impl Display {
         Ok(display)
     }
 
-    /// The picture, unless trying `fakesink`. It has the stream's aspect
-    /// ratio once frames arrive.
-    pub fn paintable(&self) -> Option<&gdk::Paintable> {
-        self.paintable.as_ref()
+    /// The picture. It has the stream's aspect ratio once frames arrive.
+    pub fn paintable(&self) -> &gdk::Paintable {
+        &self.paintable
     }
 }
 
@@ -305,7 +254,7 @@ struct FrameCounters {
 ///   number means this process is not keeping up,
 /// - the most buffers that were held at once; near the compositor's pool
 ///   size means it is being starved from this end.
-fn log_frame_rates(pad: &gst::Pad, paintable: Option<&gdk::Paintable>) -> glib::SourceId {
+fn log_frame_rates(pad: &gst::Pad, paintable: &gdk::Paintable) -> glib::SourceId {
     let counters = Arc::new(FrameCounters::default());
     let started = Instant::now();
 
@@ -334,12 +283,10 @@ fn log_frame_rates(pad: &gst::Pad, paintable: Option<&gdk::Paintable>) -> glib::
         gst::PadProbeReturn::Ok
     });
 
-    if let Some(paintable) = paintable {
-        let handing_on = counters.clone();
-        paintable.connect_invalidate_contents(move |_| {
-            handing_on.handed_on.fetch_add(1, Ordering::Relaxed);
-        });
-    }
+    let handing_on = counters.clone();
+    paintable.connect_invalidate_contents(move |_| {
+        handing_on.handed_on.fetch_add(1, Ordering::Relaxed);
+    });
 
     glib::timeout_add_seconds_local(FRAME_LOG_INTERVAL, move || {
         let per_second = |count: &AtomicU64| {
