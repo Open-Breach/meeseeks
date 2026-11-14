@@ -1,0 +1,17 @@
+[package]
+name = "meeseeks"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "A virtual monitor shown as a window, for sharing a sane-sized screen"
+
+[dependencies]
+# async-io rather than the default tokio: the futures are driven by the GLib
+# main loop, and zbus then runs the bus connection on a helper thread of its own.
+ashpd = { version = "0.14", default-features = false, features = ["async-io", "screencast"] }
+env_logger = "0.11"
+gst = { package = "gstreamer", version = "0.25" }
+# GtkGraphicsOffload, the widget that hands DMA-BUF frames to the compositor,
+# arrived in GTK 4.14.
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
+log = "0.4"
