@@ -3,8 +3,9 @@
 Two ways to run the unmodified app where there is no GNOME or KDE session, such
 as a container. Both put stand-ins around it:
 
-- a mock of `org.freedesktop.portal.ScreenCast` (`mock_portal.py`) that prints
-  what the app asks of it,
+- a mock of `org.freedesktop.portal.ScreenCast` and of the pointer calls of
+  `org.freedesktop.portal.RemoteDesktop` (`mock_portal.py`) that prints what
+  the app asks of it,
 - a test program in place of the compositor's virtual monitor (`producers/`),
 - a private session bus, PipeWire, WirePlumber and a headless sway.
 
@@ -106,6 +107,9 @@ These were last run with Ubuntu 26.10 in the root: PipeWire 1.6.8, GStreamer
   it had no free buffer. The same file is attached to the upstream report.
 - `producers/plain-consumer.c`: a bare PipeWire consumer, to compare with
   `pipewiresrc`.
+- `pointer.py`: a mouse for the headless seat, which has none. It holds a
+  virtual pointer and moves, clicks and scrolls as it is told on its standard
+  input.
 
 ## Where the distribution has no `gtk4paintablesink`
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""A stand-in for xdg-desktop-portal's ScreenCast interface.
+"""A stand-in for xdg-desktop-portal's ScreenCast interface, and for the part
+of its RemoteDesktop interface that moves the pointer.
 
 It follows the portal's D-Bus contract (request and session object paths,
 Response signals) and, where the real thing would ask the compositor for a
@@ -13,8 +14,24 @@ MOCK_START_RESPONSE=1 makes Start answer "cancelled", as a declined dialog does.
 MOCK_START_DELAY=<seconds> holds the answer to Start back, as an open dialog does.
 MOCK_BAD_FD=1 hands out a socket nobody answers on instead of the PipeWire
 remote; MOCK_BAD_FD=devnull hands out /dev/null.
+MOCK_STREAM_SIZE=<width>x<height> has Start give that size for the stream,
+as KDE's portal does; the default is to give none, as GNOME's does for a
+virtual monitor.
+
+For RemoteDesktop sessions:
+MOCK_DEVICES=<bits> is what Start grants of the devices asked for; the default
+is all of them. 0 is a user who leaves remote interaction switched off.
+MOCK_POINTER_OUTPUT=<sway output> makes the mock do what a desktop does with
+its one cursor: a position sent for the stream puts sway's cursor at that spot
+of that output, and a button is pressed or released there. Without it the
+calls are only printed and the cursor stays where it is.
+MOCK_ECHO=<file> is for a desktop that takes a position without moving its
+cursor: the buttons and scrolls it is sent then land where the cursor still
+is. They are written to that file as lines for pointer.py, which does them
+with the test's mouse.
 """
 
+import json
 import os
 import socket
 import subprocess
@@ -28,6 +45,7 @@ from gi.repository import GLib
 BUS_NAME = "org.freedesktop.portal.Desktop"
 OBJECT_PATH = "/org/freedesktop/portal/desktop"
 SCREENCAST = "org.freedesktop.portal.ScreenCast"
+REMOTE_DESKTOP = "org.freedesktop.portal.RemoteDesktop"
 REQUEST = "org.freedesktop.portal.Request"
 SESSION = "org.freedesktop.portal.Session"
 PROPERTIES = "org.freedesktop.DBus.Properties"
@@ -87,6 +105,12 @@ class Session(WithProperties):
         self.sources = None
         self.producer = None
         self.closed = False
+        # What a RemoteDesktop session has been asked for and has been given.
+        self.devices_asked = 0
+        self.devices = 0
+        self.node_id = None
+        # The size Start gave for the stream, which is none unless asked to.
+        self.size = (0, 0)
 
     @dbus.service.signal(SESSION, signature="a{sv}")
     def Closed(self, details):
@@ -162,9 +186,14 @@ class ScreenCast(WithProperties):
 
     @dbus.service.method(SCREENCAST, in_signature="osa{sv}", out_signature="o", sender_keyword="sender")
     def Start(self, session_handle, parent_window, options, sender=None):
+        say(f"Start (parent window {str(parent_window)!r})")
+        return self.start(session_handle, options, sender, {})
+
+    def start(self, session_handle, options, sender, more_results):
+        """The dialog and the virtual monitor, for either kind of session.
+        more_results is what the answer says besides the streams."""
         request = self.request(sender, options)
         session = self.sessions[str(session_handle)]
-        say(f"Start (parent window {str(parent_window)!r})")
 
         response = int(os.environ.get("MOCK_START_RESPONSE", "0"))
         if response != 0:
@@ -176,12 +205,12 @@ class ScreenCast(WithProperties):
         delay = float(os.environ.get("MOCK_START_DELAY", "0"))
         if delay > 0:
             say(f"dialog open for {delay}s")
-            GLib.timeout_add(int(delay * 1000), self.finish_start, session, request)
+            GLib.timeout_add(int(delay * 1000), self.finish_start, session, request, more_results)
             return request
-        self.finish_start(session, request)
+        self.finish_start(session, request, more_results)
         return request
 
-    def finish_start(self, session, request):
+    def finish_start(self, session, request, more_results):
         if session.closed:
             say("dialog dismissed: the session was closed while it was open")
             return False
@@ -195,11 +224,17 @@ class ScreenCast(WithProperties):
                 break
         GLib.io_add_watch(session.producer.stdout, GLib.IO_IN | GLib.IO_HUP, self.relay)
         say("virtual monitor created, PipeWire node", node_id)
+        session.node_id = node_id
+        properties = {"source_type": dbus.UInt32(4)}
+        size = os.environ.get("MOCK_STREAM_SIZE")
+        if size:
+            session.size = tuple(int(side) for side in size.split("x"))
+            properties["size"] = dbus.Struct([dbus.Int32(side) for side in session.size], signature="ii")
         stream = dbus.Struct(
-            (dbus.UInt32(node_id), dbus.Dictionary({"source_type": dbus.UInt32(4)}, signature="sv")),
+            (dbus.UInt32(node_id), dbus.Dictionary(properties, signature="sv")),
             signature="ua{sv}",
         )
-        request.respond(0, {"streams": dbus.Array([stream], signature="(ua{sv})")})
+        request.respond(0, dict(more_results, streams=dbus.Array([stream], signature="(ua{sv})")))
         return False
 
     @staticmethod
@@ -231,11 +266,134 @@ class ScreenCast(WithProperties):
         return dbus.types.UnixFd(remote.fileno())
 
 
+class Portal(ScreenCast):
+    """The same object, answering as RemoteDesktop too. A RemoteDesktop
+    session takes ScreenCast's SelectSources and OpenPipeWireRemote, as the
+    real portal's does, and its own Start gives the streams with the devices."""
+
+    properties = dict(
+        ScreenCast.properties,
+        **{
+            REMOTE_DESKTOP: {
+                "version": dbus.UInt32(2),
+                "AvailableDeviceTypes": dbus.UInt32(1 | 2 | 4),
+            }
+        },
+    )
+
+    @dbus.service.method(REMOTE_DESKTOP, in_signature="a{sv}", out_signature="o", sender_keyword="sender")
+    def CreateSession(self, options, sender=None):
+        request = self.request(sender, options)
+        path = f"{OBJECT_PATH}/session/{sender_part(sender)}/{options['session_handle_token']}"
+        self.sessions[path] = Session(self.bus, path, sender)
+        say("RemoteDesktop.CreateSession ->", path)
+        request.respond(0, {"session_handle": dbus.String(path)})
+        return request
+
+    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}", out_signature="o", sender_keyword="sender")
+    def SelectDevices(self, session_handle, options, sender=None):
+        request = self.request(sender, options)
+        shown = {str(k): int(v) for k, v in options.items() if k != "handle_token"}
+        say("RemoteDesktop.SelectDevices", shown)
+        self.sessions[str(session_handle)].devices_asked = shown.get("types", 0)
+        request.respond(0, {})
+        return request
+
+    @dbus.service.method(REMOTE_DESKTOP, in_signature="osa{sv}", out_signature="o", sender_keyword="sender")
+    def Start(self, session_handle, parent_window, options, sender=None):
+        session = self.sessions[str(session_handle)]
+        session.devices = session.devices_asked & int(os.environ.get("MOCK_DEVICES", session.devices_asked))
+        say(f"RemoteDesktop.Start (parent window {str(parent_window)!r}), granting devices {session.devices}")
+        return self.start(session_handle, options, sender, {"devices": dbus.UInt32(session.devices)})
+
+    def pointer_session(self, session_handle):
+        """The session, if it may move the pointer."""
+        session = self.sessions.get(str(session_handle))
+        if session is None or session.closed or session.node_id is None:
+            raise dbus.exceptions.DBusException(
+                "Session is not started", name="org.freedesktop.DBus.Error.Failed"
+            )
+        if not session.devices & 2:
+            raise dbus.exceptions.DBusException(
+                "Session is not allowed to call NotifyPointer methods",
+                name="org.freedesktop.DBus.Error.Failed",
+            )
+        return session
+
+    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}udd", out_signature="")
+    def NotifyPointerMotionAbsolute(self, session_handle, options, stream, x, y):
+        session = self.pointer_session(session_handle)
+        x, y = float(x), float(y)
+        say(f"NotifyPointerMotionAbsolute stream {int(stream)} at {x:.1f},{y:.1f}")
+        # xdg-desktop-portal's own check, and its only one: the position has
+        # to lie inside the size Start gave for the stream, and a size that
+        # was not given counts as 0 by 0. It does not look at the stream.
+        width, height = session.size
+        if not (0 <= x < width and 0 <= y < height):
+            say(f"refused: not inside the {width}x{height} that Start gave for the stream")
+            raise dbus.exceptions.DBusException(
+                "Invalid position", name="org.freedesktop.DBus.Error.Failed"
+            )
+        # Answer first, then act, as the real portal does: it hands the event
+        # on to the desktop without waiting for it.
+        GLib.idle_add(self.put_cursor, x, y)
+
+    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}iu", out_signature="")
+    def NotifyPointerButton(self, session_handle, options, button, state):
+        self.pointer_session(session_handle)
+        say(f"NotifyPointerButton {int(button)}", "pressed" if int(state) else "released")
+        GLib.idle_add(self.click_cursor, int(button), int(state))
+        self.echo("press" if int(state) else "release", int(button))
+
+    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}dd", out_signature="")
+    def NotifyPointerAxis(self, session_handle, options, dx, dy):
+        self.pointer_session(session_handle)
+        finish = ", finish" if options.get("finish") else ""
+        say(f"NotifyPointerAxis {float(dx):.1f},{float(dy):.1f}{finish}")
+        if not finish:
+            self.echo("swipe", float(dy))
+
+    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}ui", out_signature="")
+    def NotifyPointerAxisDiscrete(self, session_handle, options, axis, steps):
+        self.pointer_session(session_handle)
+        say(f"NotifyPointerAxisDiscrete axis {int(axis)}, {int(steps)} steps")
+        if int(axis) == 0:
+            self.echo("wheel", int(steps))
+
+    @staticmethod
+    def echo(*words):
+        path = os.environ.get("MOCK_ECHO")
+        if path:
+            with open(path, "w") as mouse:
+                print(*words, file=mouse)
+
+    @staticmethod
+    def put_cursor(x, y):
+        output = os.environ.get("MOCK_POINTER_OUTPUT")
+        if not output:
+            return False
+        outputs = json.loads(subprocess.check_output(["swaymsg", "-t", "get_outputs"]))
+        rect = next((o["rect"] for o in outputs if o["name"] == output), None)
+        if rect is None:
+            say(f"there is no output {output}; the cursor stays where it is")
+            return False
+        subprocess.run(["swaymsg", "-q", "seat", "seat0", "cursor", "set", str(rect["x"] + x), str(rect["y"] + y)])
+        say(f"the cursor is now at {x:.1f},{y:.1f} of {output}")
+        return False
+
+    @staticmethod
+    def click_cursor(button, state):
+        if os.environ.get("MOCK_POINTER_OUTPUT"):
+            action = "press" if state else "release"
+            subprocess.run(["swaymsg", "-q", "seat", "seat0", "cursor", action, str(button)])
+        return False
+
+
 def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     name = dbus.service.BusName(BUS_NAME, bus)  # noqa: F841 (keeps the name)
-    ScreenCast(bus)
+    Portal(bus)
     say("ready")
     GLib.MainLoop().run()
 
