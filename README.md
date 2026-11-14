@@ -34,6 +34,8 @@ The window opens with a choice of sizes for the virtual monitor: presets, or a w
 
 Once the monitor has started the window cannot be resized, so that the picture stays unscaled. **Options** in the title bar can lift that lock; resizing then scales the picture and leaves the monitor as it is. The options also have the renderer GTK draws with (GL by default, Vulkan, or Cairo in software) and two experimental switches for how frames are taken. Saving them closes the app and starts it again, because they only take effect at startup.
 
+If the window is moved onto its own virtual monitor it would show itself, over and over. It then shows a request to move it back to a physical screen instead, and the picture returns once it is back.
+
 The options and the size last used are kept in `~/.config/meeseeks/settings.toml`. `GSK_RENDERER` and `MEESEEKS_TRY` in the environment win over the file.
 
 On every start the terminal prints one `buffer path:` line: `DMA-BUF` means frames reach the window without a CPU copy, `shared memory` means each one is copied.

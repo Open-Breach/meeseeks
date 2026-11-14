@@ -7,6 +7,7 @@ mod checks;
 mod checks_dialog;
 mod display;
 mod environment;
+mod mirror;
 mod options;
 mod renderer;
 mod selector;
@@ -22,13 +23,19 @@ use gtk::{gdk, glib};
 
 use display::Display;
 use environment::Environment;
+use mirror::Mirror;
 use selector::Selector;
 use session::Session;
 use settings::{MIN_SIDE, Settings};
 
-/// The names of the two things the window can show.
+/// The names of the things the window can show.
 const SELECTOR: &str = "selector";
 const PICTURE: &str = "picture";
+const AWAY: &str = "away";
+
+/// What the window says, in place of the picture, while it is on its own
+/// virtual monitor.
+const AWAY_MESSAGE: &str = "Move this window back to a physical screen.";
 
 /// A started virtual monitor: the portal session that keeps it alive and the
 /// pipeline that shows it.
@@ -45,7 +52,7 @@ struct Shell {
     /// Draws nothing. It is the size the picture is to be shown at, which is
     /// what makes the stage, and with it the window, ask for that size.
     sizer: gtk::Picture,
-    /// The selector or the picture, laid over the sizer.
+    /// The selector, the picture or the message, laid over the sizer.
     pages: gtk::Stack,
     selector: Rc<Selector>,
     picture: gtk::Picture,
@@ -62,6 +69,8 @@ struct Shell {
     /// window can be resized and the selector follows it; from then on the
     /// lock setting decides.
     engaged: Cell<bool>,
+    /// Tells when the window is on its own virtual monitor.
+    mirror: Mirror,
     /// The monitor the selector was last told about, and the watch on its
     /// size and scale.
     screen: RefCell<Option<(gdk::Monitor, [glib::SignalHandlerId; 2])>>,
@@ -76,6 +85,9 @@ impl Shell {
         self.selector.set_busy(true);
         self.remember(size);
         self.hold_window();
+        // Any monitor that turns up from here on is taken to be the virtual
+        // one.
+        self.mirror.mark(&WidgetExt::display(&self.window));
         let shell = self.clone();
         glib::spawn_future_local(async move {
             match shell.open(size).await {
@@ -84,7 +96,7 @@ impl Shell {
                         .picture
                         .set_paintable(Some(running.display.paintable()));
                     shell.running.replace(Some(running));
-                    shell.pages.set_visible_child_name(PICTURE);
+                    shell.show_page();
                     shell.selector.set_busy(false);
                     shell.stop.set_visible(true);
                     shell.stop.grab_focus();
@@ -135,9 +147,9 @@ impl Shell {
         };
         self.stop.set_visible(false);
         self.selector.set_busy(true);
-        self.pages.set_visible_child_name(SELECTOR);
         self.picture.set_paintable(gdk::Paintable::NONE);
         drop(display);
+        self.show_page();
         self.release_window();
 
         // Closing the window lands here too; keep the application alive
@@ -181,6 +193,32 @@ impl Shell {
         if let Err(err) = settings.save() {
             log::warn!("could not save the settings: {err}");
         }
+    }
+
+    /// Shows what there is to show: the selector, the picture, or, while the
+    /// window is on its own virtual monitor, the request to move it away.
+    /// The picture is then not drawn, so the stream no longer shows itself.
+    fn show_page(&self) {
+        let page = if self.running.borrow().is_none() {
+            SELECTOR
+        } else if self.mirror.virtual_monitor().is_some() {
+            AWAY
+        } else {
+            PICTURE
+        };
+        let shown = self.pages.visible_child_name();
+        if shown.as_deref() == Some(page) {
+            return;
+        }
+        if page == AWAY {
+            log::info!(
+                "the window is on the virtual monitor; not drawing the stream \
+                 until it is back on a physical screen"
+            );
+        } else if shown.as_deref() == Some(AWAY) && page == PICTURE {
+            log::info!("the window is back on a physical screen; drawing the stream again");
+        }
+        self.pages.set_visible_child_name(page);
     }
 
     /// Asks the window to give the stage this size.
@@ -304,9 +342,17 @@ fn build_window(
     // Lets GTK hand DMA-BUF frames to the compositor as they are.
     let offload = gtk::GraphicsOffload::builder().child(&picture).build();
 
+    let away = gtk::Label::builder()
+        .label(AWAY_MESSAGE)
+        .wrap(true)
+        .justify(gtk::Justification::Center)
+        .css_classes(["title-2"])
+        .build();
+
     let pages = gtk::Stack::new();
     pages.add_named(selector.widget(), Some(SELECTOR));
     pages.add_named(&offload, Some(PICTURE));
+    pages.add_named(&away, Some(AWAY));
 
     // The stage asks for the sizer's size and no other: what is laid over a
     // GtkOverlay's child does not count. The window has no size of its own,
@@ -355,6 +401,7 @@ fn build_window(
         restart,
         stage_size: Cell::new((0, 0)),
         engaged: Cell::new(false),
+        mirror: Mirror::default(),
         screen: RefCell::new(None),
         running: RefCell::new(None),
     });
@@ -391,8 +438,10 @@ fn build_window(
         }
     });
 
-    // Which monitor the window is on is known once it has a surface, and
-    // changes as it enters and leaves monitors.
+    // Which monitors the window is on is known once it has a surface, and
+    // changes as it enters and leaves them. The selector wants to know for
+    // the room there is, and the picture must not be drawn on its own
+    // virtual monitor.
     let weak = Rc::downgrade(&shell);
     window.connect_realize(move |window| {
         let Some(surface) = window.surface() else {
@@ -400,9 +449,15 @@ fn build_window(
         };
         for entered in [true, false] {
             let weak = weak.clone();
-            let moved = move |_: &gdk::Surface, _: &gdk::Monitor| {
+            let moved = move |_: &gdk::Surface, monitor: &gdk::Monitor| {
                 if let Some(shell) = weak.upgrade() {
+                    if entered {
+                        shell.mirror.entered(monitor);
+                    } else {
+                        shell.mirror.left(monitor);
+                    }
                     shell.find_screen();
+                    shell.show_page();
                 }
             };
             if entered {

@@ -19,6 +19,7 @@ A Linux app that creates a virtual monitor through the XDG ScreenCast portal and
 - `src/main.rs` — one GTK 4 window: the resolution selector while idle, the picture and a Stop button in the title bar while running. Runs the startup checks first.
 - `src/selector.rs` — the resolution selector: presets, custom size, fit check, Start button.
 - `src/settings.rs` — the settings file, `~/.config/meeseeks/settings.toml`. No GTK imports.
+- `src/mirror.rs` — tells when the window is on its own virtual monitor, which is any monitor that appeared after Start.
 - `src/options.rs` — the options dialog. Saving restarts the app.
 - `src/environment.rs` — puts the renderer and the `MEESEEKS_TRY` switches from the settings into the environment before GTK starts, unless the variables are set already, and relaunches the app.
 - `src/checks.rs` — the startup checks, one small function each. `src/checks_dialog.rs` — the dialog that lists them when one fails.
