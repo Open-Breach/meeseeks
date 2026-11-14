@@ -112,7 +112,8 @@ impl Display {
         // caught up with the frame's timestamp, and a compositor with a
         // pool of 8 buffers runs out of them. The compositor stamps its
         // frames with the monotonic clock, which is what the system clock
-        // reads, so with that one a frame is never early.
+        // reads, so with that one a frame is never early. Reported as
+        // https://gitlab.freedesktop.org/pipewire/pipewire/-/work_items/5586
         pipeline.use_clock(Some(&gst::SystemClock::obtain()));
         pipeline.add_many([&src, &filter, &sink])?;
         gst::Element::link_many([&src, &filter, &sink])?;
