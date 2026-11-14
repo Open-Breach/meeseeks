@@ -8,7 +8,8 @@ description = "A virtual monitor shown as a window, for sharing a sane-sized scr
 [dependencies]
 # async-io rather than the default tokio: the futures are driven by the GLib
 # main loop, and zbus then runs the bus connection on a helper thread of its own.
-ashpd = { version = "0.14", default-features = false, features = ["async-io", "screencast"] }
+# remote_desktop is for the input experiment in src/input.rs.
+ashpd = { version = "0.14", default-features = false, features = ["async-io", "remote_desktop", "screencast"] }
 env_logger = "0.11"
 gst = { package = "gstreamer", version = "0.25" }
 # GtkGraphicsOffload, the widget that hands DMA-BUF frames to the compositor,

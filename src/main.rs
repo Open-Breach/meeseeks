@@ -7,6 +7,7 @@ mod checks;
 mod checks_dialog;
 mod display;
 mod environment;
+mod input;
 mod mirror;
 mod options;
 mod renderer;
@@ -23,6 +24,7 @@ use gtk::{gdk, glib};
 
 use display::Display;
 use environment::Environment;
+use input::Input;
 use mirror::Mirror;
 use selector::Selector;
 use session::Session;
@@ -42,6 +44,8 @@ const AWAY_MESSAGE: &str = "Move this window back to a physical screen.";
 struct Running {
     session: Session,
     display: Display,
+    /// The input experiment at work on the picture, if it is switched on.
+    input: Option<Input>,
 }
 
 struct Shell {
@@ -71,6 +75,8 @@ struct Shell {
     engaged: Cell<bool>,
     /// Tells when the window is on its own virtual monitor.
     mirror: Mirror,
+    /// The variant of the input experiment, if `MEESEEKS_INPUT` asks for one.
+    input: Option<input::Variant>,
     /// The monitor the selector was last told about, and the watch on its
     /// size and scale.
     screen: RefCell<Option<(gdk::Monitor, [glib::SignalHandlerId; 2])>>,
@@ -113,7 +119,14 @@ impl Shell {
     }
 
     async fn open(self: &Rc<Self>, size: (i32, i32)) -> Result<Running, Box<dyn Error>> {
-        let (session, stream) = Session::start().await?;
+        let (session, stream, pointer) = match self.input {
+            None => {
+                let (session, stream) = Session::start().await?;
+                (session, stream, None)
+            }
+            // The experiment needs a session that comes with the pointer.
+            Some(_) => Session::start_with_pointer().await?,
+        };
 
         // The pipeline calls this from its own bus handler; stop from a fresh
         // main loop turn rather than tearing the pipeline down under it.
@@ -127,7 +140,17 @@ impl Shell {
         };
 
         match Display::new(stream.fd, stream.node_id, size, on_end) {
-            Ok(display) => Ok(Running { session, display }),
+            Ok(display) => {
+                let input = self
+                    .input
+                    .zip(pointer)
+                    .map(|(variant, pointer)| Input::attach(&self.picture, variant, pointer));
+                Ok(Running {
+                    session,
+                    display,
+                    input,
+                })
+            }
             Err(err) => {
                 // Without a picture the monitor would be there but unseen.
                 if let Err(err) = session.close().await {
@@ -142,9 +165,15 @@ impl Shell {
     /// desktop remove the monitor, and brings the selector back. Does nothing
     /// unless a monitor is running.
     fn stop(self: &Rc<Self>) {
-        let Some(Running { session, display }) = self.running.take() else {
+        let Some(Running {
+            session,
+            display,
+            input,
+        }) = self.running.take()
+        else {
             return;
         };
+        drop(input);
         self.stop.set_visible(false);
         self.selector.set_busy(true);
         self.picture.set_paintable(gdk::Paintable::NONE);
@@ -402,6 +431,7 @@ fn build_window(
         stage_size: Cell::new((0, 0)),
         engaged: Cell::new(false),
         mirror: Mirror::default(),
+        input: input::Variant::from_env(),
         screen: RefCell::new(None),
         running: RefCell::new(None),
     });
