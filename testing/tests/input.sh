@@ -15,7 +15,8 @@
 #         the window, which gets each of them a second time. The app must not
 #         pass that one on again.
 # nosize  Start gives no size for the stream, as GNOME's portal does for a
-#         virtual monitor, and every position is refused for it.
+#         virtual monitor, and every position is refused for it. The app
+#         sends one for each stay of the pointer, and no button or scroll.
 # denied  Start grants no pointer, as GNOME's dialog does with "Allow Remote
 #         Interaction" left off.
 #
@@ -63,7 +64,7 @@ sent() {
 # Brings the pointer onto a spot of the picture by way of the title bar. A
 # pointer that lands on the window in one jump is told to the app as having
 # entered it, not as having moved, and the app goes by moves alone.
-onto() { hand move $((x + 640)) $((y + bar / 2)); hand move $((x + $1)) $((py + $2)); }
+onto() { hand move $((x + w / 2)) $((y + bar / 2)); hand move $((x + $1)) $((py + $2)); }
 read -r x y w h < <(window_rect)
 bar=$((h - 720))
 picture
@@ -81,9 +82,9 @@ echo "== onto the picture at 320,180: a position of 320,180"
 onto 320 180; sent
 echo "== on to 640,360 if the pointer is still there: forward sends it, teleport has sent the pointer off already"
 hand move $((x + 640)) $((py + 360)); sent
-echo "== ten quick moves to the right, to 740,360"
+echo "== ten quick moves to the right, to 740,360: forward sends them, or the newest of those that had to wait"
 for step in 1 2 3 4 5 6 7 8 9 10; do echo "move $((x + 640 + step * 10)) $((py + 360))" >&9; done; sleep 3; sent
-echo "== left button down and up, the wheel two clicks down, a swipe of 30: forward passes them on"
+echo "== left button down and up, the wheel two clicks down, a swipe of 30: forward passes them on if the portal took the position"
 hand press 272; hand release 272; hand wheel 2; hand swipe 30; sent
 echo "== left button down, then off the picture onto the title bar with it held: forward lets go of it"
 hand press 272; hand move $((x + 640)) $((y + bar / 2)); hand release 272; sent
