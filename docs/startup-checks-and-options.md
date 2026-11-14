@@ -66,8 +66,23 @@ When the virtual monitor isn't running, the big central area of the Meeseeks win
 ### Window size
 
 - Choosing a resolution sizes the window's inner area (the stream area, excluding the title bar) to exactly that resolution, so the picture is shown 1:1.
-- Option "Lock window size", on by default: the window can't be resized.
-- With the lock off, resizing the window only scales the picture. The virtual monitor keeps its resolution.
+- While the virtual monitor is not running, the window is freely resizable, whatever the "Lock window size" setting. Dragging it updates the custom width and height fields live to the size of the window's inner area, and switches the selection from a preset to Custom. The fit check still applies.
+- Option "Lock window size", on by default: once the virtual monitor has started, the window can't be resized.
+- With the lock off, resizing the window while the virtual monitor runs only scales the picture. The virtual monitor keeps its resolution.
+
+### Monitor name
+
+- On GNOME the virtual monitor shows as "MetaVendor" in the display settings.
+- Check whether a client can set the vendor or product name to "Meeseeks": in the Mutter source, in the ScreenCast portal, and in the options of Mutter's own D-Bus interface.
+- Implement it only if there is a supported way. Otherwise report in the PR what was found. No workarounds.
+
+### Feedback loop
+
+- The Meeseeks window can be dragged onto its own virtual monitor. The stream then shows the window, which shows the stream: a hall-of-mirrors loop.
+- Detect when the window's surface enters the virtual monitor (GdkSurface enter-monitor, the monitor list).
+- While it is there, stop drawing the stream and show a centred message: "Move this window back to a physical screen."
+- Resume drawing as soon as the window is back on a physical monitor.
+- Do not try to move or snap the window back.
 
 ### Acceptance
 
@@ -75,8 +90,14 @@ When the virtual monitor isn't running, the big central area of the Meeseeks win
 2. On a 1440 px tall screen, 2560×1440, 3840×2160, 1600×1200 and 1080×1920 are grayed out.
 3. Picking a preset or a valid custom size and pressing Start opens the virtual monitor at that size.
 4. After a restart, the last used resolution is preselected.
-5. After choosing 1920×1080, the stream area measures exactly 1920×1080 and the window can't be resized; with the lock off, resizing scales the picture and the virtual monitor stays at 1920×1080.
+5. After choosing 1920×1080, the stream area measures exactly 1920×1080. Once started, the window can't be resized; with the lock off, resizing scales the picture and the virtual monitor stays at 1920×1080.
 6. The title-bar Stop button stops the virtual monitor and brings the selector back.
+7. Before Start, the window can be resized with the lock on and with it off. While it is dragged, the custom fields follow the size of the stream area and no preset stays selected.
+8. Dragging the window larger than the available space brings up the fit warning.
+9. Pressing Start after a drag starts the virtual monitor at the dragged size, and the picture is shown 1:1.
+10. Monitor name: if there is a supported way, GNOME's display settings show the virtual monitor as "Meeseeks". If there is none, nothing changes and the PR says what was found.
+11. Dragging the running Meeseeks window onto the virtual monitor replaces the picture with the message, and no hall-of-mirrors loop builds up.
+12. Dragging it back onto a physical monitor brings the picture back. The app never moves the window itself.
 
 ## 3. Options dialog
 

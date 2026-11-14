@@ -1,12 +1,13 @@
 //! The shell: one GTK 4 window, opened once the startup checks have passed.
-//! While nothing runs it shows the resolution selector; while a virtual
-//! monitor runs, its picture, with a Stop button in the title bar. The title
-//! bar also opens the options.
+//! While nothing runs it shows the resolution selector, and can be resized
+//! to choose a size; while a virtual monitor runs, its picture, with a Stop
+//! button in the title bar. The title bar also opens the options.
 
 mod checks;
 mod checks_dialog;
 mod display;
 mod environment;
+mod mirror;
 mod options;
 mod renderer;
 mod selector;
@@ -22,13 +23,19 @@ use gtk::{gdk, glib};
 
 use display::Display;
 use environment::Environment;
+use mirror::Mirror;
 use selector::Selector;
 use session::Session;
-use settings::Settings;
+use settings::{MIN_SIDE, Settings};
 
-/// The names of the two things the window can show.
+/// The names of the things the window can show.
 const SELECTOR: &str = "selector";
 const PICTURE: &str = "picture";
+const AWAY: &str = "away";
+
+/// What the window says, in place of the picture, while it is on its own
+/// virtual monitor.
+const AWAY_MESSAGE: &str = "Move this window back to a physical screen.";
 
 /// A started virtual monitor: the portal session that keeps it alive and the
 /// pipeline that shows it.
@@ -45,7 +52,7 @@ struct Shell {
     /// Draws nothing. It is the size the picture is to be shown at, which is
     /// what makes the stage, and with it the window, ask for that size.
     sizer: gtk::Picture,
-    /// The selector or the picture, laid over the sizer.
+    /// The selector, the picture or the message, laid over the sizer.
     pages: gtk::Stack,
     selector: Rc<Selector>,
     picture: gtk::Picture,
@@ -55,8 +62,15 @@ struct Shell {
     overridden: options::Overridden,
     /// Set to have `main` start the app again once it has shut down.
     restart: Rc<Cell<bool>>,
-    /// The size the stage was last given.
+    /// The size the stage is meant to have: the one the window was last asked
+    /// for, or the one the user has resized it to since.
     stage_size: Cell<(i32, i32)>,
+    /// Whether a monitor is being started or is running. Until then the
+    /// window can be resized and the selector follows it; from then on the
+    /// lock setting decides.
+    engaged: Cell<bool>,
+    /// Tells when the window is on its own virtual monitor.
+    mirror: Mirror,
     /// The monitor the selector was last told about, and the watch on its
     /// size and scale.
     screen: RefCell<Option<(gdk::Monitor, [glib::SignalHandlerId; 2])>>,
@@ -70,6 +84,10 @@ impl Shell {
         let size = self.selector.size();
         self.selector.set_busy(true);
         self.remember(size);
+        self.hold_window();
+        // Any monitor that turns up from here on is taken to be the virtual
+        // one.
+        self.mirror.mark(&WidgetExt::display(&self.window));
         let shell = self.clone();
         glib::spawn_future_local(async move {
             match shell.open(size).await {
@@ -78,13 +96,14 @@ impl Shell {
                         .picture
                         .set_paintable(Some(running.display.paintable()));
                     shell.running.replace(Some(running));
-                    shell.pages.set_visible_child_name(PICTURE);
+                    shell.show_page();
                     shell.selector.set_busy(false);
                     shell.stop.set_visible(true);
                     shell.stop.grab_focus();
                 }
                 Err(err) => {
                     log::error!("could not start: {err}");
+                    shell.release_window();
                     shell.selector.set_busy(false);
                     // Being busy cost the button the focus.
                     shell.selector.focus_start();
@@ -128,11 +147,10 @@ impl Shell {
         };
         self.stop.set_visible(false);
         self.selector.set_busy(true);
-        self.pages.set_visible_child_name(SELECTOR);
         self.picture.set_paintable(gdk::Paintable::NONE);
         drop(display);
-        // The window may have gone to another monitor while it was running.
-        self.size_stage();
+        self.show_page();
+        self.release_window();
 
         // Closing the window lands here too; keep the application alive
         // until the portal has been told.
@@ -177,25 +195,88 @@ impl Shell {
         }
     }
 
-    /// Gives the stage the size the picture is to be shown at, and the window
-    /// with it.
-    fn size_stage(&self) {
-        let size = self.selector.picture_area();
-        if self.stage_size.replace(size) == size {
+    /// Shows what there is to show: the selector, the picture, or, while the
+    /// window is on its own virtual monitor, the request to move it away.
+    /// The picture is then not drawn, so the stream no longer shows itself.
+    fn show_page(&self) {
+        let page = if self.running.borrow().is_none() {
+            SELECTOR
+        } else if self.mirror.virtual_monitor().is_some() {
+            AWAY
+        } else {
+            PICTURE
+        };
+        let shown = self.pages.visible_child_name();
+        if shown.as_deref() == Some(page) {
             return;
         }
+        if page == AWAY {
+            log::info!(
+                "the window is on the virtual monitor; not drawing the stream \
+                 until it is back on a physical screen"
+            );
+        } else if shown.as_deref() == Some(AWAY) && page == PICTURE {
+            log::info!("the window is back on a physical screen; drawing the stream again");
+        }
+        self.pages.set_visible_child_name(page);
+    }
+
+    /// Asks the window to give the stage this size.
+    fn give_stage(&self, size: (i32, i32)) {
+        self.stage_size.set(size);
         let (width, height) = size;
         self.sizer
             .set_paintable(Some(&gdk::Paintable::new_empty(width, height)));
+        // Has the window forget the size it has, so that it takes the one its
+        // content would like, which is the sizer's.
+        self.window.set_default_size(-1, -1);
+    }
+
+    /// A size has been chosen in the selector, or the room for it has
+    /// changed: the stage takes the size the picture can be shown at. Not
+    /// once a monitor is being started; that keeps the size it started with.
+    fn follow_selector(&self) {
+        if !self.engaged.get() {
+            self.give_stage(self.selector.picture_area());
+        }
+    }
+
+    /// The stage has been given a size. Until Start, one that the window was
+    /// not asked for is the user resizing the window, and becomes the chosen
+    /// size.
+    fn stage_resized(&self, size: (i32, i32)) {
+        if self.engaged.get() || size == self.stage_size.get() {
+            return;
+        }
+        self.stage_size.set(size);
+        self.selector.set_size(size);
+    }
+
+    /// From Start on the lock setting decides whether the window can be
+    /// resized.
+    fn hold_window(&self) {
+        self.engaged.set(true);
         if self.settings.borrow().lock_window_size {
             // A window that cannot be resized is as large as its content
             // insists on being.
+            let (width, height) = self.stage_size.get();
             self.stage.set_size_request(width, height);
+            self.window.set_resizable(false);
         } else {
-            // Has the window forget the size it has, so that it takes the one
-            // its content would like.
-            self.window.set_default_size(-1, -1);
+            // As small as the user likes; the picture scales.
+            self.stage.set_size_request(-1, -1);
         }
+    }
+
+    /// Until Start the window can be resized, whatever the lock setting, and
+    /// the selector follows it. The stage goes back to the size it had at
+    /// Start, which it may have left if the lock is off.
+    fn release_window(&self) {
+        self.engaged.set(false);
+        self.window.set_resizable(true);
+        // No smaller than the smallest size there is to choose.
+        self.stage.set_size_request(MIN_SIDE, MIN_SIDE);
+        self.give_stage(self.stage_size.get());
     }
 
     /// Tells the selector which monitor the window is on, or, as long as it
@@ -261,15 +342,32 @@ fn build_window(
     // Lets GTK hand DMA-BUF frames to the compositor as they are.
     let offload = gtk::GraphicsOffload::builder().child(&picture).build();
 
+    let away = gtk::Label::builder()
+        .label(AWAY_MESSAGE)
+        .wrap(true)
+        .justify(gtk::Justification::Center)
+        .css_classes(["title-2"])
+        .build();
+
     let pages = gtk::Stack::new();
     pages.add_named(selector.widget(), Some(SELECTOR));
     pages.add_named(&offload, Some(PICTURE));
+    pages.add_named(&away, Some(AWAY));
 
     // The stage asks for the sizer's size and no other: what is laid over a
     // GtkOverlay's child does not count. The window has no size of its own,
     // so it opens just large enough for the stage.
     let sizer = gtk::Picture::new();
-    let stage = gtk::Overlay::builder().child(&sizer).build();
+    let stage = gtk::Overlay::builder()
+        .child(&sizer)
+        .width_request(MIN_SIDE)
+        .height_request(MIN_SIDE)
+        .build();
+    // Draws nothing either. It is there to be given the stage's size, which
+    // a GtkDrawingArea tells of. Under the pages, so that it is not in the
+    // pointer's way.
+    let watcher = gtk::DrawingArea::new();
+    stage.add_overlay(&watcher);
     stage.add_overlay(&pages);
 
     let stop = gtk::Button::builder()
@@ -287,7 +385,6 @@ fn build_window(
         .title("Meeseeks")
         .titlebar(&header)
         .child(&stage)
-        .resizable(!settings.lock_window_size)
         .build();
 
     let shell = Rc::new(Shell {
@@ -303,17 +400,22 @@ fn build_window(
         overridden,
         restart,
         stage_size: Cell::new((0, 0)),
+        engaged: Cell::new(false),
+        mirror: Mirror::default(),
         screen: RefCell::new(None),
         running: RefCell::new(None),
     });
 
     let weak = Rc::downgrade(&shell);
     shell.selector.connect_changed(move || {
-        // A running monitor keeps the size it was started with.
-        if let Some(shell) = weak.upgrade()
-            && shell.running.borrow().is_none()
-        {
-            shell.size_stage();
+        if let Some(shell) = weak.upgrade() {
+            shell.follow_selector();
+        }
+    });
+    let weak = Rc::downgrade(&shell);
+    watcher.connect_resize(move |_, width, height| {
+        if let Some(shell) = weak.upgrade() {
+            shell.stage_resized((width, height));
         }
     });
     let weak = Rc::downgrade(&shell);
@@ -336,8 +438,10 @@ fn build_window(
         }
     });
 
-    // Which monitor the window is on is known once it has a surface, and
-    // changes as it enters and leaves monitors.
+    // Which monitors the window is on is known once it has a surface, and
+    // changes as it enters and leaves them. The selector wants to know for
+    // the room there is, and the picture must not be drawn on its own
+    // virtual monitor.
     let weak = Rc::downgrade(&shell);
     window.connect_realize(move |window| {
         let Some(surface) = window.surface() else {
@@ -345,9 +449,15 @@ fn build_window(
         };
         for entered in [true, false] {
             let weak = weak.clone();
-            let moved = move |_: &gdk::Surface, _: &gdk::Monitor| {
+            let moved = move |_: &gdk::Surface, monitor: &gdk::Monitor| {
                 if let Some(shell) = weak.upgrade() {
+                    if entered {
+                        shell.mirror.entered(monitor);
+                    } else {
+                        shell.mirror.left(monitor);
+                    }
                     shell.find_screen();
+                    shell.show_page();
                 }
             };
             if entered {
@@ -358,7 +468,7 @@ fn build_window(
         }
     });
     shell.find_screen();
-    shell.size_stage();
+    shell.follow_selector();
 
     let closing = shell.clone();
     window.connect_close_request(move |_| {

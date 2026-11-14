@@ -30,9 +30,11 @@ cargo run
 
 If the system lacks something the app needs, a dialog lists what instead of the window; the same list goes to the terminal.
 
-The window opens with a choice of sizes for the virtual monitor: presets, or a width and height of your own. Presets that do not fit on your screen are greyed out. Press **Start** and approve the portal's dialog. The desktop should gain a second monitor of the chosen size, and the window shows what is on it, pixel for pixel. Move windows there with the mouse or Super+Shift+Arrow. **Stop** in the title bar, or closing the window, removes the monitor again.
+The window opens with a choice of sizes for the virtual monitor: presets, or a width and height of your own. Resizing the window chooses a size too: the width and height follow it. Presets that do not fit on your screen are greyed out. Press **Start** and approve the portal's dialog. The desktop should gain a second monitor of the chosen size, and the window shows what is on it, pixel for pixel. Move windows there with the mouse or Super+Shift+Arrow. **Stop** in the title bar, or closing the window, removes the monitor again.
 
-The window cannot be resized, so that the picture stays unscaled. **Options** in the title bar can lift that lock; resizing then scales the picture and leaves the monitor as it is. The options also have the renderer GTK draws with (GL by default, Vulkan, or Cairo in software) and two experimental switches for how frames are taken. Saving them closes the app and starts it again, because they only take effect at startup.
+Once the monitor has started the window cannot be resized, so that the picture stays unscaled. **Options** in the title bar can lift that lock; resizing then scales the picture and leaves the monitor as it is. The options also have the renderer GTK draws with (GL by default, Vulkan, or Cairo in software) and two experimental switches for how frames are taken. Saving them closes the app and starts it again, because they only take effect at startup.
+
+If the window is moved onto its own virtual monitor it would show itself, over and over. It then shows a request to move it back to a physical screen instead, and the picture returns once it is back.
 
 The options and the size last used are kept in `~/.config/meeseeks/settings.toml`. `GSK_RENDERER` and `MEESEEKS_TRY` in the environment win over the file.
 
