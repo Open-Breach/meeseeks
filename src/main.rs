@@ -170,11 +170,11 @@ fn build_window(app: &gtk::Application) {
 /// falls back to GL.
 ///
 /// This went in as a cure for the stutter, which it is not: sessions have
-/// stuttered with either renderer. What it does do, on the one GNOME machine
-/// this has run on, a laptop with a second GPU: GTK no longer wakes that GPU
-/// when the app starts, and the picture comes up as soon as the portal has
-/// answered instead of seconds later. Whether that is worth changing the
-/// environment for is undecided. Setting `GSK_RENDERER` overrides it.
+/// stuttered with either renderer. It stays for what it does do, on the one
+/// GNOME machine this has run on, a laptop with a second GPU: GTK no longer
+/// wakes that GPU when the app starts, and the picture comes up as soon as
+/// the portal has answered instead of seconds later. Setting `GSK_RENDERER`
+/// overrides it.
 fn keep_gtk_off_vulkan() {
     if std::env::var_os("GSK_RENDERER").is_some() {
         return;
