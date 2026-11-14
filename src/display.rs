@@ -120,7 +120,10 @@ impl Display {
         let sink_pad = sink.static_pad("sink");
         if let Some(pad) = &sink_pad {
             // In this order, so that the log shows what was negotiated.
-            pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, log_buffer_path);
+            let source = src.downgrade();
+            pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_, info| {
+                settle_buffer_path(&source, info)
+            });
             if tries.srgb {
                 pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, present_as_srgb);
             }
@@ -188,10 +191,20 @@ fn make(factory: &'static str) -> Result<gst::Element, Error> {
         .map_err(|_| Error::MissingElement(factory))
 }
 
-/// Logs the kind of buffers the sink agreed to take, each time caps reach it:
-/// once per start, and again if the stream is negotiated anew. DMA-BUFs are
-/// imported as they are; anything else is copied into a texture on the CPU.
-fn log_buffer_path(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadProbeReturn {
+/// Runs each time caps reach the sink: once per start, and again if the
+/// stream is negotiated anew. Logs the kind of buffers the sink agreed to
+/// take and tells `pipewiresrc`, the `source`, how to hand them on.
+///
+/// DMA-BUFs go to the sink as they are. Shared memory is lent by the
+/// compositor as well, but `pipewiresrc` gives it up when the stream is
+/// negotiated anew, even while GTK still draws from it, which crashes. So
+/// those frames are copied as they arrive. The setting is read for every
+/// frame, on the thread this runs on, and the caps come before the frames
+/// they describe.
+fn settle_buffer_path(
+    source: &glib::WeakRef<gst::Element>,
+    info: &mut gst::PadProbeInfo,
+) -> gst::PadProbeReturn {
     let Some(gst::PadProbeData::Event(event)) = &info.data else {
         return gst::PadProbeReturn::Ok;
     };
@@ -203,7 +216,14 @@ fn log_buffer_path(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadPro
     let dmabuf = caps
         .features(0)
         .is_some_and(|features| features.contains("memory:DMABuf"));
-    let path = if dmabuf { "DMA-BUF" } else { "shared memory" };
+    if let Some(source) = source.upgrade() {
+        source.set_property("always-copy", !dmabuf);
+    }
+    let path = if dmabuf {
+        "DMA-BUF"
+    } else {
+        "shared memory, copied"
+    };
     log::info!("buffer path: {path} ({caps})");
     gst::PadProbeReturn::Ok
 }
