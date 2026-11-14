@@ -156,11 +156,11 @@ impl Selector {
                 if let Some(selector) = weak.upgrade()
                     && !selector.syncing.get()
                 {
-                    selector.sync();
+                    selector.changed();
                 }
             });
         }
-        selector.sync();
+        selector.refresh();
         selector
     }
 
@@ -176,8 +176,21 @@ impl Selector {
         (self.width.value_as_int(), self.height.value_as_int())
     }
 
+    /// Makes `size` the chosen size without that counting as a choice made
+    /// in the selector: nobody is told. For when the window has been resized
+    /// and the selector is to follow it.
+    pub fn set_size(&self, (width, height): (i32, i32)) {
+        self.syncing.set(true);
+        self.width.set_value(f64::from(width));
+        self.height.set_value(f64::from(height));
+        self.syncing.set(false);
+        self.refresh();
+    }
+
     /// The size the picture can be shown at: the chosen size, or, where there
     /// is no room for that, the chosen size scaled down to the room there is.
+    /// Never less than the smallest size there is to choose, which is as
+    /// small as the window gets.
     pub fn picture_area(&self) -> (i32, i32) {
         let (width, height) = self.size();
         match self.available.get() {
@@ -186,8 +199,8 @@ impl Selector {
                     .min(f64::from(room_h) / f64::from(height));
                 // Truncating keeps it within the room.
                 (
-                    ((f64::from(width) * scale) as i32).max(1),
-                    ((f64::from(height) * scale) as i32).max(1),
+                    ((f64::from(width) * scale) as i32).max(MIN_SIDE),
+                    ((f64::from(height) * scale) as i32).max(MIN_SIDE),
                 )
             }
             _ => (width, height),
@@ -208,11 +221,14 @@ impl Selector {
             )
         };
         self.screen.set_label(&text);
-        self.available.set(Some((width, height - FIT_MARGIN)));
-        self.sync();
+        let available = Some((width, height - FIT_MARGIN));
+        if self.available.replace(available) != available {
+            self.changed();
+        }
     }
 
-    /// `f` is called when the chosen size changes, or the room for it.
+    /// `f` is called when a size is chosen in the selector, or the room for
+    /// the chosen size changes.
     pub fn connect_changed(&self, f: impl Fn() + 'static) {
         self.on_change.replace(Some(Box::new(f)));
     }
@@ -241,12 +257,21 @@ impl Selector {
         self.width.set_value(f64::from(width));
         self.height.set_value(f64::from(height));
         self.syncing.set(false);
-        self.sync();
+        self.changed();
+    }
+
+    /// A size has been chosen, or the room for it is another.
+    fn changed(&self) {
+        self.refresh();
+        if let Some(on_change) = &*self.on_change.borrow() {
+            on_change();
+        }
     }
 
     /// Brings the presets and the warning in line with the chosen size and
-    /// the room there is, and passes the change on.
-    fn sync(&self) {
+    /// the room there is. A preset is shown as chosen when the size is
+    /// exactly its own; any other size is a custom one.
+    fn refresh(&self) {
         // From the start, since reading the size can change a field too.
         self.syncing.set(true);
         let size = self.size();
@@ -260,11 +285,8 @@ impl Selector {
         self.warning.set_visible(!self.fits(size));
         if let Some((room_w, room_h)) = self.available.get() {
             self.warning.set_tooltip_text(Some(&format!(
-                "There is room for {room_w}×{room_h}. The picture will be scaled down."
+                "There is room for {room_w}×{room_h} on this screen."
             )));
-        }
-        if let Some(on_change) = &*self.on_change.borrow() {
-            on_change();
         }
     }
 }
