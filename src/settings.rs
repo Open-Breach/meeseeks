@@ -6,6 +6,8 @@ use std::{fs, io};
 
 use serde::{Deserialize, Serialize};
 
+use crate::renderer::Renderer;
+
 /// The shortest and the longest side a virtual monitor can be asked to have.
 pub const MIN_SIDE: i32 = 480;
 pub const MAX_SIDE: i32 = 8192;
@@ -14,6 +16,12 @@ pub const MAX_SIDE: i32 = 8192;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// The renderer GTK is asked to draw with.
+    pub renderer: Renderer,
+    /// The `MEESEEKS_TRY` switches `copy` and `srgb`; `src/display.rs` says
+    /// what they do.
+    pub try_copy: bool,
+    pub try_srgb: bool,
     /// Whether the window keeps the size of the virtual monitor, so that the
     /// picture is always shown pixel for pixel.
     pub lock_window_size: bool,
@@ -25,6 +33,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            renderer: Renderer::default(),
+            try_copy: false,
+            try_srgb: false,
             lock_window_size: true,
             width: 1920,
             height: 1080,
@@ -72,6 +83,15 @@ impl Settings {
         let temporary = path.with_extension("toml.new");
         fs::write(&temporary, text)?;
         fs::rename(&temporary, &path)
+    }
+
+    /// The switches that are on, the way `MEESEEKS_TRY` lists them.
+    pub fn tries(&self) -> String {
+        [(self.try_copy, "copy"), (self.try_srgb, "srgb")]
+            .into_iter()
+            .filter_map(|(on, name)| on.then_some(name))
+            .collect::<Vec<_>>()
+            .join(",")
     }
 
     /// A size out of range was not written by this app; it goes back to the

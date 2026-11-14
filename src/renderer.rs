@@ -1,8 +1,12 @@
 //! Which of GTK's renderers draws the window. GTK takes the choice from its
 //! environment, so it has to be made before GTK is initialised.
 
-/// The renderers there is a choice between.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+/// The renderers there is a choice between. In the settings file they are
+/// `gl`, `vulkan` and `cairo`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Renderer {
     #[default]
     Gl,
@@ -43,6 +47,8 @@ impl Renderer {
 /// Asks GTK for `renderer`, unless `GSK_RENDERER` is set: the environment
 /// wins. Returns what GTK has been asked for, which is `None` if
 /// `GSK_RENDERER` names something other than the three above.
+///
+/// Vulkan and Cairo are asked for by name, through `GSK_RENDERER`.
 ///
 /// GL is asked for by keeping GTK off Vulkan, its default on Wayland, rather
 /// than by name, because the name of the GL renderer differs between GTK

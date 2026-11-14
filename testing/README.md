@@ -40,6 +40,7 @@ takes everything down again.
 | `tests/failures.sh <case>` | A declined dialog, the window closed while the dialog is open, the stream taken away, a dead PipeWire remote. With `bad-fd` and `not-a-remote` the window freezes, which is a known limitation |
 | `tests/resolution.sh 3440x1440` | The selector on an output of that size: in `out/resolution-idle.png`, the screen's size and which presets are greyed out. Then a preset and a custom size are each started; look for the producer's `negotiated size` lines. A size too large for the output brings the warning and a window scaled down to the room there is. After a restart the window has the size last started, from the settings file it prints. A second argument sets the output's scale |
 | `tests/window-size.sh 2560x1440 [locked\|unlocked]` | The area under the title bar is exactly 1920×1080 and the picture is drawn pixel for pixel. Of the eight pixels it reads, the first two are the picture's white edge, the next two its gradient, the next two the white edge again, and the last two lie just outside the picture. Then sway is asked to shrink the window: locked, the picture still runs on past the frame sway drew; unlocked, it is scaled into it |
+| `tests/options.sh` | The options dialog, worked with the keyboard. Cairo and both switches are saved, and the app starts again by itself: look for `GTK draws with GskCairoRenderer` and `trying: copy,srgb`. Reset to defaults, with a monitor running, closes its session and brings GL back, or Cairo with a warning where there is no GL. Then with Vulkan in the file: `GSK_RENDERER=cairo` and `MEESEEKS_TRY=srgb` in the environment win, and `out/options-overridden.png` shows the dialog saying so; without them Vulkan is asked for, and where it cannot be initialised the log says what GTK fell back to |
 | `tests/size-control.sh` | The control for that: a consumer that asks for no size gets 1280×720 from the same producer |
 | `tests/frame-rate.sh <ms or none> <seconds>` | Frame rates against a producer set up like Mutter's virtual monitor, which renegotiates the stream that many milliseconds after the start. Look for about 60 frames a second in the app's log and no ticks without a free buffer in the producer's |
 
@@ -47,7 +48,8 @@ The app's settings file is kept in the run's own directory, so every test starts
 
 Variables: `APP` is the binary to test (default `target/debug/meeseeks`),
 `PYTHON` a Python that has the distribution's `dbus` and `gi` modules (default
-`python3`), and `GSK_RENDERER` defaults to `cairo`.
+`python3`), and `GSK_RENDERER` defaults to `cairo`, except in `tests/options.sh`,
+where the settings decide.
 
 These were last run on Ubuntu 24.04 with PipeWire 1.0.5.
 

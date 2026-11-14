@@ -1,10 +1,13 @@
 //! The shell: one GTK 4 window, opened once the startup checks have passed.
 //! While nothing runs it shows the resolution selector; while a virtual
-//! monitor runs, its picture, with a Stop button in the title bar.
+//! monitor runs, its picture, with a Stop button in the title bar. The title
+//! bar also opens the options.
 
 mod checks;
 mod checks_dialog;
 mod display;
+mod environment;
+mod options;
 mod renderer;
 mod selector;
 mod session;
@@ -18,7 +21,7 @@ use gtk::prelude::*;
 use gtk::{gdk, glib};
 
 use display::Display;
-use renderer::Renderer;
+use environment::Environment;
 use selector::Selector;
 use session::Session;
 use settings::Settings;
@@ -48,6 +51,10 @@ struct Shell {
     picture: gtk::Picture,
     stop: gtk::Button,
     settings: RefCell<Settings>,
+    /// Which settings the environment stands in for, for the options to say.
+    overridden: options::Overridden,
+    /// Set to have `main` start the app again once it has shut down.
+    restart: Rc<Cell<bool>>,
     /// The size the stage was last given.
     stage_size: Cell<(i32, i32)>,
     /// The monitor the selector was last told about, and the watch on its
@@ -141,6 +148,22 @@ impl Shell {
         });
     }
 
+    fn show_options(self: &Rc<Self>) {
+        let weak = Rc::downgrade(self);
+        let settings = self.settings.borrow().clone();
+        options::show(&self.window, &settings, self.overridden, move |settings| {
+            let Some(shell) = weak.upgrade() else {
+                return Ok(());
+            };
+            settings.save()?;
+            // Closing the window stops what is running and ends the
+            // application; `main` takes it from there.
+            shell.restart.set(true);
+            shell.window.close();
+            Ok(())
+        });
+    }
+
     /// Keeps the size for the next time the app is started.
     fn remember(&self, (width, height): (i32, i32)) {
         let mut settings = self.settings.borrow_mut();
@@ -221,7 +244,12 @@ impl Shell {
     }
 }
 
-fn build_window(app: &gtk::Application, settings: Settings) {
+fn build_window(
+    app: &gtk::Application,
+    settings: Settings,
+    overridden: options::Overridden,
+    restart: Rc<Cell<bool>>,
+) {
     selector::load_css();
     let selector = Selector::new((settings.width, settings.height));
 
@@ -249,8 +277,10 @@ fn build_window(app: &gtk::Application, settings: Settings) {
         .css_classes(["destructive-action"])
         .visible(false)
         .build();
+    let options = gtk::Button::with_mnemonic("_Options");
     let header = gtk::HeaderBar::new();
     header.pack_start(&stop);
+    header.pack_end(&options);
 
     let window = gtk::ApplicationWindow::builder()
         .application(app)
@@ -270,6 +300,8 @@ fn build_window(app: &gtk::Application, settings: Settings) {
         picture,
         stop,
         settings: RefCell::new(settings),
+        overridden,
+        restart,
         stage_size: Cell::new((0, 0)),
         screen: RefCell::new(None),
         running: RefCell::new(None),
@@ -294,6 +326,13 @@ fn build_window(app: &gtk::Application, settings: Settings) {
     shell.stop.connect_clicked(move |_| {
         if let Some(shell) = weak.upgrade() {
             shell.stop();
+        }
+    });
+
+    let weak = Rc::downgrade(&shell);
+    options.connect_clicked(move |_| {
+        if let Some(shell) = weak.upgrade() {
+            shell.show_options();
         }
     });
 
@@ -337,9 +376,18 @@ fn build_window(app: &gtk::Application, settings: Settings) {
 }
 
 /// Runs the startup checks and opens the main window, or, if one of them
-/// fails, the dialog that shows them all. `asked` is the renderer GTK has been
-/// asked for.
-fn activate(app: &gtk::Application, asked: Option<Renderer>, settings: Settings) {
+/// fails, the dialog that shows them all.
+fn activate(
+    app: &gtk::Application,
+    settings: Settings,
+    environment: &Environment,
+    restart: Rc<Cell<bool>>,
+) {
+    let asked = environment.asked;
+    let overridden = options::Overridden {
+        renderer: environment.renderer_overridden,
+        tries: environment.tries_overridden,
+    };
     // There is no window yet to keep the application alive.
     let hold = app.hold();
     let app = app.clone();
@@ -355,20 +403,32 @@ fn activate(app: &gtk::Application, asked: Option<Renderer>, settings: Settings)
                     _ => log::debug!("check passed: {}", check.name),
                 }
             }
-            build_window(&app, settings);
+            build_window(&app, settings, overridden, restart);
         }
         drop(hold);
     });
 }
 
 fn main() -> glib::ExitCode {
-    // SAFETY: this runs first thing in `main`, before any other thread exists
-    // that could be reading the environment.
-    let asked = unsafe { renderer::request(Renderer::default()) };
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let settings = Settings::load();
+    // SAFETY: nothing so far has started a thread, and GTK, which reads what
+    // this sets, is not initialised yet.
+    let environment = Rc::new(unsafe { environment::apply(&settings) });
+    let restart = Rc::new(Cell::new(false));
 
     let app = gtk::Application::builder().build();
-    app.connect_activate(move |app| activate(app, asked, settings.clone()));
-    app.run()
+    app.connect_activate({
+        let environment = environment.clone();
+        let restart = restart.clone();
+        move |app| activate(app, settings.clone(), &environment, restart.clone())
+    });
+    let status = app.run();
+
+    if restart.get() {
+        let err = environment.relaunch();
+        log::error!("could not start the app again: {err}");
+        return glib::ExitCode::FAILURE;
+    }
+    status
 }

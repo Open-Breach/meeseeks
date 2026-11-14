@@ -247,8 +247,9 @@ impl Selector {
     /// Brings the presets and the warning in line with the chosen size and
     /// the room there is, and passes the change on.
     fn sync(&self) {
-        let size = self.size();
+        // From the start, since reading the size can change a field too.
         self.syncing.set(true);
+        let size = self.size();
         for (preset, button) in &self.presets {
             let fits = self.fits(*preset);
             button.set_sensitive(fits);
