@@ -32,6 +32,10 @@ Press **Start** and approve the portal's dialog. The desktop should gain a secon
 
 On every start the terminal prints one `buffer path:` line: `DMA-BUF` means frames reach the window without a CPU copy, `shared memory` means each one is copied.
 
+## Testing without a desktop session
+
+[testing/](testing/README.md) has two setups that run the app against a mock portal and a test stream in a headless compositor, for a container or any machine with no GNOME or KDE session.
+
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE).
