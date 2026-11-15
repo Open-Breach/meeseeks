@@ -5,11 +5,14 @@
 
 mod checks;
 mod checks_dialog;
+mod desktop;
 mod display;
 mod environment;
+mod input;
 mod mirror;
 mod options;
 mod pictograms;
+mod pointer;
 mod renderer;
 mod selector;
 mod session;
@@ -25,6 +28,7 @@ use gtk::{gdk, glib};
 
 use display::Display;
 use environment::Environment;
+use input::Input;
 use mirror::Mirror;
 use selector::Selector;
 use session::Session;
@@ -46,6 +50,9 @@ const AWAY_REASON: &str =
 struct Running {
     session: Session,
     display: Display,
+    /// The teleporter at work on the picture, where the session came with a
+    /// pointer.
+    input: Option<Input>,
 }
 
 struct Shell {
@@ -117,7 +124,7 @@ impl Shell {
     }
 
     async fn open(self: &Rc<Self>, size: (i32, i32)) -> Result<Running, Box<dyn Error>> {
-        let (session, stream) = Session::start().await?;
+        let (session, stream, pointer) = Session::start().await?;
 
         // The pipeline calls this from its own bus handler; stop from a fresh
         // main loop turn rather than tearing the pipeline down under it.
@@ -131,7 +138,14 @@ impl Shell {
         };
 
         match Display::new(stream.fd, stream.node_id, size, on_end) {
-            Ok(display) => Ok(Running { session, display }),
+            Ok(display) => {
+                let input = pointer.map(|pointer| Input::attach(&self.picture, pointer));
+                Ok(Running {
+                    session,
+                    display,
+                    input,
+                })
+            }
             Err(err) => {
                 // Without a picture the monitor would be there but unseen.
                 if let Err(err) = session.close().await {
@@ -146,9 +160,17 @@ impl Shell {
     /// desktop remove the monitor, and brings the selector back. Does nothing
     /// unless a monitor is running.
     fn stop(self: &Rc<Self>) {
-        let Some(Running { session, display }) = self.running.take() else {
+        let Some(Running {
+            session,
+            display,
+            mut input,
+        }) = self.running.take()
+        else {
             return;
         };
+        if let Some(input) = &mut input {
+            input.detach();
+        }
         self.stop.set_visible(false);
         self.selector.set_busy(true);
         self.picture.set_paintable(gdk::Paintable::NONE);
@@ -164,6 +186,8 @@ impl Shell {
             if let Err(err) = session.close().await {
                 log::warn!("could not close the session: {err}");
             }
+            // Its connection to the desktop goes after the session.
+            drop(input);
             shell.selector.set_busy(false);
             shell.selector.focus_start();
             drop(hold);
@@ -370,7 +394,14 @@ fn build_window(
     sign.set_hexpand(true);
     away.append(&sign);
 
-    let pages = gtk::Stack::new();
+    // Only as large as the page that is shown has to be. A stack is as large
+    // as its largest page otherwise, and the picture, scaled down with the
+    // lock off, could then be no lower than the selector at its smallest:
+    // its foot was drawn past the window's.
+    let pages = gtk::Stack::builder()
+        .hhomogeneous(false)
+        .vhomogeneous(false)
+        .build();
     pages.add_named(selector.widget(), Some(SELECTOR));
     pages.add_named(&offload, Some(PICTURE));
     pages.add_named(&away, Some(AWAY));

@@ -70,6 +70,17 @@ keys() { wtype -s 500 "$@" -s 200; }
 # focus, and has it again afterwards.
 type_size() { keys -M shift -k Tab -k Tab -m shift -s 200 "$1" -k Tab -s 200 "$2" -k Tab; }
 
+# Gives the seat a mouse, see pointer.py; its log goes to out/<name>-pointer.log.
+# `hand` then does with it what its arguments say: move <x> <y> on the output
+# layout, press or release <evdev code>, wheel <clicks>, swipe <dy>.
+start_pointer() {
+  mkfifo "$XDG_RUNTIME_DIR/hand"
+  "$PYTHON" "$T/pointer.py" < "$XDG_RUNTIME_DIR/hand" > "$OUT/$1-pointer.log" 2>&1 &
+  exec 9> "$XDG_RUNTIME_DIR/hand"
+  sleep 0.5
+}
+hand() { echo "$*" >&9; sleep 0.5; }
+
 # Writes the app's settings file from the lines given, one key = value each.
 write_settings() {
   mkdir -p "$(dirname "$SETTINGS")"
