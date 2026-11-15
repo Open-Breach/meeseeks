@@ -12,6 +12,7 @@ mod input;
 mod mirror;
 mod options;
 mod pictograms;
+mod plasma;
 mod pointer;
 mod renderer;
 mod screenshot;
@@ -28,6 +29,7 @@ use std::time::Instant;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 
+use desktop::Desktop;
 use display::Display;
 use environment::Environment;
 use input::Input;
@@ -132,7 +134,8 @@ impl Shell {
     }
 
     async fn open(self: &Rc<Self>, chosen: (i32, i32)) -> Result<Running, Box<dyn Error>> {
-        let (session, stream, pointer) = Session::start().await?;
+        let ask_remote_control = self.settings.borrow().ask_remote_control;
+        let (session, stream, pointer) = Session::start(ask_remote_control).await?;
         // Where the desktop has made the monitor already, at a size of its
         // own, that size is the one to show; the stream is asked for none.
         // Everywhere else the size asked of the stream is the chosen one.
@@ -287,17 +290,24 @@ impl Shell {
     fn show_options(self: &Rc<Self>) {
         let weak = Rc::downgrade(self);
         let settings = self.settings.borrow().clone();
-        options::show(&self.window, &settings, self.overridden, move |settings| {
-            let Some(shell) = weak.upgrade() else {
-                return Ok(());
-            };
-            settings.save()?;
-            // Closing the window stops what is running and ends the
-            // application; `main` takes it from there.
-            shell.restart.set(true);
-            shell.window.close();
-            Ok(())
-        });
+        let on_plasma = desktop::current().0 == Desktop::Kde;
+        options::show(
+            &self.window,
+            &settings,
+            self.overridden,
+            on_plasma,
+            move |settings| {
+                let Some(shell) = weak.upgrade() else {
+                    return Ok(());
+                };
+                settings.save()?;
+                // Closing the window stops what is running and ends the
+                // application; `main` takes it from there.
+                shell.restart.set(true);
+                shell.window.close();
+                Ok(())
+            },
+        );
     }
 
     /// The desktop has made the monitor `made` large, whatever was chosen.
@@ -687,7 +697,7 @@ fn activate(
     let hold = app.hold();
     let app = app.clone();
     glib::spawn_future_local(async move {
-        let checks = checks::run(asked).await;
+        let checks = checks::run(asked, settings.ask_remote_control).await;
         if checks::failed(&checks) {
             eprint!("{}", checks::report(&checks));
             checks_dialog::show(&app, &checks);

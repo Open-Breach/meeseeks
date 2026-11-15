@@ -1,6 +1,7 @@
-//! The options dialog: the renderer and the window lock in one list, the
-//! experimental switches in another. What it saves takes effect when the app
-//! has been started again.
+//! The options dialog: the renderer, the window lock and, on KDE Plasma,
+//! whether remote control is asked for in one list, the experimental
+//! switches in another. What it saves takes effect when the app has been
+//! started again.
 
 use std::io;
 use std::rc::Rc;
@@ -39,6 +40,8 @@ struct Controls {
     renderer: gtk::DropDown,
     copy: gtk::Switch,
     lock: gtk::Switch,
+    /// Shown on KDE Plasma only. Elsewhere it keeps what the settings had.
+    remote: gtk::Switch,
 }
 
 impl Controls {
@@ -50,6 +53,7 @@ impl Controls {
         self.renderer.set_selected(position as u32);
         self.copy.set_active(settings.try_copy);
         self.lock.set_active(settings.lock_window_size);
+        self.remote.set_active(settings.ask_remote_control);
     }
 
     /// `settings` with what the controls say in place of what it had.
@@ -61,12 +65,14 @@ impl Controls {
             renderer,
             try_copy: self.copy.is_active(),
             lock_window_size: self.lock.is_active(),
+            ask_remote_control: self.remote.is_active(),
             ..settings.clone()
         }
     }
 }
 
-/// Opens the dialog over `parent`, showing `settings`.
+/// Opens the dialog over `parent`, showing `settings`. `on_plasma` says that
+/// the desktop is KDE Plasma, which has an option of its own.
 ///
 /// `save` is called with the new settings once the user has changed
 /// something, pressed Save and agreed to the restart. It is to write them
@@ -76,6 +82,7 @@ pub fn show(
     parent: &gtk::ApplicationWindow,
     settings: &Settings,
     overridden: Overridden,
+    on_plasma: bool,
     save: impl Fn(&Settings) -> io::Result<()> + 'static,
 ) {
     let labels: Vec<&str> = RENDERERS.iter().map(|(_, label)| *label).collect();
@@ -83,6 +90,7 @@ pub fn show(
         renderer: gtk::DropDown::from_strings(&labels),
         copy: gtk::Switch::new(),
         lock: gtk::Switch::new(),
+        remote: gtk::Switch::new(),
     });
     controls.show(settings);
 
@@ -100,6 +108,16 @@ pub fn show(
         None,
         &controls.lock,
     ));
+    if on_plasma {
+        general.append(&row(
+            "Ask for remote control",
+            "At Start, ask Plasma for remote control along with the monitor, \
+             so that a click on the picture can place the pointer there. Needs \
+             Plasma 6.6 or later. Off, you get the monitor without it.",
+            None,
+            &controls.remote,
+        ));
+    }
 
     let heading = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)

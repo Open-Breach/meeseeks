@@ -6,11 +6,14 @@
 //! it also grants the pointer that `src/pointer.rs` moves, which is what the
 //! teleporter in `src/input.rs` needs. It is asked for where the desktop is
 //! known to give a virtual monitor that way, see
-//! [`Desktop::has_teleporter`]. Everywhere else, and where the RemoteDesktop
-//! portal cannot be had, the session is a plain ScreenCast one.
+//! [`Desktop::has_teleporter`] and, for KDE Plasma, `src/plasma.rs`.
+//! Everywhere else, and where the RemoteDesktop portal cannot be had, the
+//! session is a plain ScreenCast one.
 //!
-//! Either way the desktop shows one dialog for each Start, and the monitor is
-//! there whether or not the pointer was granted.
+//! Either way the desktop shows one dialog for each Start. On GNOME the
+//! monitor is there whether or not the pointer was granted in it. Plasma's
+//! dialog allows both or neither: denied, there is no monitor, and no second
+//! session is opened to get one, which would be a second dialog.
 
 use std::fmt;
 use std::os::fd::OwnedFd;
@@ -18,8 +21,10 @@ use std::rc::Rc;
 
 use ashpd::desktop::remote_desktop::{DeviceType, RemoteDesktop, SelectDevicesOptions};
 use ashpd::desktop::screencast::{CursorMode, Screencast, SelectSourcesOptions, SourceType};
+use ashpd::zbus;
 
 use crate::desktop::{self, Desktop};
+use crate::plasma::{self, NotAsked};
 use crate::pointer::{Monitor, Pointer};
 
 /// Where the virtual monitor's frames can be picked up.
@@ -63,10 +68,13 @@ impl Session {
     ///
     /// The pointer comes with it where the desktop grants it. It is `None`
     /// where remote control is not asked for or cannot be had, and where the
-    /// user did not allow it in the dialog; the monitor is there all the
+    /// user did not allow it in GNOME's dialog; the monitor is there all the
     /// same.
-    pub async fn start() -> Result<(Self, Stream, Option<Pointer>), Error> {
-        if let Some(prepared) = prepare_remote().await {
+    ///
+    /// `ask_remote_control` is the option of that name, which counts on KDE
+    /// Plasma only: off, Plasma is asked for the monitor alone.
+    pub async fn start(ask_remote_control: bool) -> Result<(Self, Stream, Option<Pointer>), Error> {
+        if let Some(prepared) = prepare_remote(ask_remote_control).await {
             return Self::start_remote(prepared).await;
         }
 
@@ -139,17 +147,40 @@ fn virtual_source() -> SelectSourcesOptions {
 /// Nothing here makes the desktop show a dialog. So when a step fails, the
 /// plain ScreenCast session can still be opened instead, and the user is
 /// asked once all the same. The reason goes to the log.
-async fn prepare_remote() -> Option<Prepared> {
+async fn prepare_remote(ask_remote_control: bool) -> Option<Prepared> {
     let (desktop, name) = desktop::current();
     if !desktop.has_teleporter() {
-        let why = match desktop {
-            Desktop::Kde => "on KDE Plasma it is not used yet",
-            _ => "it is used on GNOME only so far",
-        };
         log::info!(
-            "no teleporter: remote control is not asked for on this desktop ({name:?}); {why}"
+            "no teleporter: remote control is not asked for on this desktop ({name:?}); it \
+             is used on GNOME and on KDE Plasma 6.6 or later"
         );
         return None;
+    }
+    if desktop == Desktop::Kde {
+        let asked = match zbus::Connection::session().await {
+            Ok(bus) => plasma::asks_remote_control(&bus, ask_remote_control).await,
+            Err(err) => {
+                log::warn!("the session bus cannot be reached to look at Plasma: {err}");
+                Err(NotAsked::Older)
+            }
+        };
+        match asked {
+            Ok(()) => {}
+            Err(NotAsked::SwitchedOff) => {
+                log::info!(
+                    "no teleporter: \"Ask for remote control\" is off in the options, so \
+                     Plasma is asked for the monitor alone"
+                );
+                return None;
+            }
+            Err(NotAsked::Older) => {
+                log::info!(
+                    "no teleporter: remote control is not asked of a Plasma older than 6.6, \
+                     which this one seems to be"
+                );
+                return None;
+            }
+        }
     }
     match try_prepare_remote().await {
         Ok(prepared) => Some(prepared),

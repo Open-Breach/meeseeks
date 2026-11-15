@@ -23,6 +23,11 @@ pub struct Settings {
     /// Whether the window keeps the size of the virtual monitor, so that the
     /// picture is always shown pixel for pixel.
     pub lock_window_size: bool,
+    /// On KDE Plasma: whether Start asks the desktop for remote control
+    /// along with the monitor, which the teleporter needs. Plasma's dialog
+    /// then allows both or neither, so there is this to have the monitor
+    /// without being asked. Nothing looks at it on another desktop.
+    pub ask_remote_control: bool,
     /// The size the virtual monitor was last started with.
     pub width: i32,
     pub height: i32,
@@ -34,6 +39,7 @@ impl Default for Settings {
             renderer: Renderer::default(),
             try_copy: false,
             lock_window_size: true,
+            ask_remote_control: true,
             width: 1920,
             height: 1080,
         }

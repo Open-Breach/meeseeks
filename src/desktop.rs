@@ -10,18 +10,13 @@ pub enum Desktop {
 }
 
 impl Desktop {
-    /// Whether the app asks this desktop for remote control along with the
-    /// monitor, which is what the teleporter needs. It does on GNOME, where
-    /// that has been run.
-    ///
-    /// Not on KDE Plasma yet. Up to 6.4 its portal casts the real screens in
-    /// a RemoteDesktop session, whatever source is asked for, and 6.5 makes
-    /// the virtual monitor but leaves the cursor out of its frames; 6.6 does
-    /// both as asked (xdg-desktop-portal-kde 8def3b79 and 2f2a0145). Nothing
-    /// the portal says tells the three apart before its dialog has been
-    /// shown, and finding out after it would take a second dialog.
+    /// Whether this is a desktop the app asks for remote control along with
+    /// the monitor, which is what the teleporter needs. GNOME is, always.
+    /// KDE Plasma is where its portal is new enough and the option for it is
+    /// on, which `src/plasma.rs` finds out; nobody has run that on a real
+    /// Plasma desktop yet.
     pub fn has_teleporter(self) -> bool {
-        self == Self::Gnome
+        matches!(self, Self::Gnome | Self::Kde)
     }
 
     /// Whether this desktop, and not the app, decides how large the virtual

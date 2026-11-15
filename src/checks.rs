@@ -12,6 +12,7 @@ use ashpd::zbus;
 use gtk::prelude::*;
 
 use crate::desktop::{self, Desktop};
+use crate::plasma::{self, NotAsked};
 use crate::renderer::Renderer;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,14 +85,15 @@ const NAMES: [&str; 8] = [
 ];
 
 /// Runs every check, in the order they are shown. `asked` is the renderer
-/// GTK has been asked for, if it is a known one. Must be called on the GTK
-/// main thread, after GTK has been initialised.
-pub async fn run(asked: Option<Renderer>) -> Vec<Check> {
+/// GTK has been asked for, if it is a known one, and `ask_remote_control`
+/// the option of that name, which counts on KDE Plasma. Must be called on
+/// the GTK main thread, after GTK has been initialised.
+pub async fn run(asked: Option<Renderer>, ask_remote_control: bool) -> Vec<Check> {
     let bus = session_bus().await;
     let portal = portal(&bus).await;
     let portal_answers = portal.status == Status::Pass;
     let screencast = screencast(&bus, portal_answers).await;
-    let remote_control = remote_control(&bus, portal_answers).await;
+    let remote_control = remote_control(&bus, portal_answers, ask_remote_control).await;
     let checks = vec![
         wayland_session(),
         desktop(),
@@ -318,7 +320,13 @@ const DEVICE_TYPE_POINTER: u32 = 2;
 /// app gives a monitor without it, so this warns and never fails. It says
 /// what `Session::start` will find; whether the user allows the pointer is
 /// asked in the desktop's dialog at every Start and cannot be known here.
-async fn remote_control(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) -> Check {
+/// `ask` is the option that has Plasma not asked at all, which is the
+/// user's choice and nothing to warn about.
+async fn remote_control(
+    bus: &zbus::Result<zbus::Connection>,
+    portal_answers: bool,
+    ask: bool,
+) -> Check {
     let name = REMOTE_CONTROL;
     let without = |why: &str| {
         Check::warn(
@@ -334,9 +342,19 @@ async fn remote_control(bus: &zbus::Result<zbus::Connection>, portal_answers: bo
         _ => return without("it needs xdg-desktop-portal, see above."),
     };
     match desktop::current().0 {
+        Desktop::Kde => match plasma::asks_remote_control(bus, ask).await {
+            Ok(()) => {}
+            Err(NotAsked::SwitchedOff) => {
+                return Check::pass(format!("{name}: switched off in the options"));
+            }
+            Err(NotAsked::Older) => {
+                return without(
+                    "it needs KDE Plasma 6.6 or later, which this does not seem to be.",
+                );
+            }
+        },
         desktop if desktop.has_teleporter() => {}
-        Desktop::Kde => return without("on KDE Plasma it is not used yet."),
-        _ => return without("it is used on GNOME only so far."),
+        _ => return without("it is used on GNOME and on KDE Plasma 6.6 or later."),
     }
     match device_types(bus).await {
         Ok(types) if types & DEVICE_TYPE_POINTER != 0 => Check::pass(name),
