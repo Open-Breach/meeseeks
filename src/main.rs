@@ -394,7 +394,14 @@ fn build_window(
     sign.set_hexpand(true);
     away.append(&sign);
 
-    let pages = gtk::Stack::new();
+    // Only as large as the page that is shown has to be. A stack is as large
+    // as its largest page otherwise, and the picture, scaled down with the
+    // lock off, could then be no lower than the selector at its smallest:
+    // its foot was drawn past the window's.
+    let pages = gtk::Stack::builder()
+        .hhomogeneous(false)
+        .vhomogeneous(false)
+        .build();
     pages.add_named(selector.widget(), Some(SELECTOR));
     pages.add_named(&offload, Some(PICTURE));
     pages.add_named(&away, Some(AWAY));
