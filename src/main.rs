@@ -50,6 +50,14 @@ const AWAY_MESSAGE: &str = "Move this window back to a physical screen.";
 const AWAY_REASON: &str =
     "It is on its own virtual monitor. The picture is paused until it is back.";
 
+/// What the selector says after Plasma's dialog was answered with Deny.
+/// That dialog allows remote control and the monitor or neither, and no
+/// second session is opened behind the user's back to get the monitor alone.
+const DENIED_ON_PLASMA: &str = "No monitor: remote control was denied. Meeseeks asks for it so \
+                                that a click on the picture can place the pointer there. Press \
+                                Start again and approve, or turn off “Ask for remote control” in \
+                                the options.";
+
 /// A started virtual monitor: the portal session that keeps it alive and the
 /// pipeline that shows it.
 struct Running {
@@ -126,6 +134,9 @@ impl Shell {
                     log::error!("could not start: {err}");
                     shell.release_window();
                     shell.selector.set_busy(false);
+                    if denied_on_plasma(err.as_ref()) {
+                        shell.selector.set_notice(Some(DENIED_ON_PLASMA));
+                    }
                     // Being busy cost the button the focus.
                     shell.selector.focus_start();
                 }
@@ -712,6 +723,16 @@ fn activate(
         }
         drop(hold);
     });
+}
+
+/// Whether a Start failed because Plasma's dialog was answered with Deny.
+/// GNOME's dialog can be cancelled too, but there that is not how remote
+/// control is refused: it has a switch for that, and a monitor either way.
+fn denied_on_plasma(err: &(dyn Error + 'static)) -> bool {
+    matches!(
+        err.downcast_ref::<session::Error>(),
+        Some(session::Error::RemoteDeclined)
+    ) && desktop::current().0 == Desktop::Kde
 }
 
 /// The application id: what the window says it belongs to, which is how the

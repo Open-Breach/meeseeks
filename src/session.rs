@@ -19,6 +19,7 @@ use std::fmt;
 use std::os::fd::OwnedFd;
 use std::rc::Rc;
 
+use ashpd::desktop::ResponseError;
 use ashpd::desktop::remote_desktop::{DeviceType, RemoteDesktop, SelectDevicesOptions};
 use ashpd::desktop::screencast::{CursorMode, Screencast, SelectSourcesOptions, SourceType};
 use ashpd::zbus;
@@ -274,7 +275,10 @@ async fn start_remote_stream(
         .await
         .map_err(Error::Remote)?
         .response()
-        .map_err(Error::Remote)?;
+        .map_err(|err| match err {
+            ashpd::Error::Response(ResponseError::Cancelled) => Error::RemoteDeclined,
+            err => Error::Remote(err),
+        })?;
     let stream = started.streams().first().ok_or(Error::NoStream)?;
     // A portal that takes no virtual source in a RemoteDesktop session may
     // cast the real screens instead, and this window would show itself in
@@ -319,6 +323,10 @@ pub enum Error {
     Portal(ashpd::Error),
     /// The same from the RemoteDesktop portal.
     Remote(ashpd::Error),
+    /// The user said no in the dialog of a RemoteDesktop session, or closed
+    /// it. On KDE Plasma that is how remote control is denied, and the
+    /// monitor with it.
+    RemoteDeclined,
     /// The RemoteDesktop portal has no pointer among the devices it offers.
     NoPointer(DeviceType),
     /// The session started but came back without a stream.
@@ -335,6 +343,10 @@ impl fmt::Display for Error {
             // form keeps it, and it is the part that says what went wrong.
             Self::Portal(err) => write!(f, "ScreenCast portal: {err} ({err:?})"),
             Self::Remote(err) => write!(f, "RemoteDesktop portal: {err} ({err:?})"),
+            Self::RemoteDeclined => write!(
+                f,
+                "RemoteDesktop portal: the desktop's dialog was declined, so there is no monitor"
+            ),
             Self::NoPointer(offered) => write!(
                 f,
                 "RemoteDesktop portal: it offers no pointer, only {offered:?}"

@@ -47,6 +47,10 @@ const LEGEND_GIVEN: &str = "On KDE Plasma the desktop decides the size of the mo
 const HINT_IDLE: &str = "Your desktop asks before the new screen appears.";
 const HINT_BUSY: &str = "Waiting for your desktop…";
 
+/// How wide a notice under the Start button runs before it wraps, in
+/// characters.
+const NOTICE_WIDTH: i32 = 64;
+
 pub struct Selector {
     root: gtk::ScrolledWindow,
     /// The presets and the custom size, with the line under them.
@@ -65,6 +69,10 @@ pub struct Selector {
     legend: gtk::Label,
     start: gtk::Button,
     hint: gtk::Label,
+    /// Something the user has to know before the next Start, with the
+    /// warning sign; hidden while there is nothing.
+    notice: gtk::Box,
+    notice_text: gtk::Label,
     /// The room there is for the picture on the monitor, once one is known.
     available: Cell<Option<(i32, i32)>>,
     /// Set while the presets and the fields are brought in line, which is
@@ -221,9 +229,25 @@ impl Selector {
             .label(HINT_IDLE)
             .css_classes(["mk-dim", "mk-caption"])
             .build();
+        let notice_text = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .max_width_chars(NOTICE_WIDTH)
+            .css_classes(["mk-warning", "mk-caption"])
+            .build();
+        let notice = gtk::Box::builder()
+            .spacing(8)
+            .halign(gtk::Align::Center)
+            .visible(false)
+            .build();
+        let sign = pictograms::warning();
+        sign.set_valign(gtk::Align::Start);
+        notice.append(&sign);
+        notice.append(&notice_text);
         let go = gtk::Box::new(gtk::Orientation::Vertical, 12);
         go.append(&collar);
         go.append(&hint);
+        go.append(&notice);
 
         let content = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -259,6 +283,8 @@ impl Selector {
             legend,
             start,
             hint,
+            notice,
+            notice_text,
             available: Cell::new(None),
             syncing: Cell::new(false),
             on_change: RefCell::new(None),
@@ -364,12 +390,23 @@ impl Selector {
     }
 
     /// While busy, no size can be chosen and Start stays pressed in; the
-    /// line under it says what the wait is for.
+    /// line under it says what the wait is for. A notice from the Start
+    /// before goes: it was about that one.
     pub fn set_busy(&self, busy: bool) {
         self.sizes.set_sensitive(!busy);
         self.start.set_sensitive(!busy);
         self.hint
             .set_label(if busy { HINT_BUSY } else { HINT_IDLE });
+        if busy {
+            self.set_notice(None);
+        }
+    }
+
+    /// Shows `text` under the Start button, with the warning sign, until the
+    /// next Start; `None` takes it away.
+    pub fn set_notice(&self, text: Option<&str>) {
+        self.notice_text.set_label(text.unwrap_or_default());
+        self.notice.set_visible(text.is_some());
     }
 
     pub fn focus_start(&self) {
