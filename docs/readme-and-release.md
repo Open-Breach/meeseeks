@@ -122,7 +122,7 @@ Start Meeseeks, pick a resolution, press Start and confirm the dialog your deskt
 
 Meeseeks also has a teleporter mode: click anywhere in the Meeseeks window and your pointer jumps to that spot on the virtual monitor. For it to work, allow remote control when the system asks; on GNOME that is the switch "Allow Remote Interaction" in the dialog at Start, and it is off by default. The click that takes you there is not passed on, so clicking something on the monitor takes a second click. During a demo this keeps you from getting sidetracked when the pointer slips off the edge.
 
-Sharing in a meeting: in Zoom, Meet, Teams or whatever you use, share a screen, not a window, and pick the virtual monitor. *(pending: one line naming the monitor as it appears in the picker, once the GNOME rename result is known.)* Everything on it goes out; everything else stays private. Switch between apps on it as you like, and if one of them crashes, the share stays up.
+Sharing in a meeting: in Zoom, Meet, Teams or whatever you use, share a screen, not a window, and pick the virtual monitor. Everything on it goes out; everything else stays private. Switch between apps on it as you like, and if one of them crashes, the share stays up.
 
 Recording: in OBS or your recorder, add the virtual monitor as a screen source. You get a video at exactly the resolution you picked, with nothing else in the frame.
 
@@ -153,7 +153,7 @@ Done? Press Stop. The monitor disappears and the desktop moves any windows left 
 ## 5. Open items
 
 - Teleporter mode: decided 2026-11-14. Click-to-enter is approved, on by default with no switch, and merges before the first release (PR 5), so its texts are no longer pending. The "Mouse on air" sign is left out.
-- Monitor name in pickers: once it is known whether the GNOME rename to "Meeseeks" worked, add the one line in *How to use it* ("it shows up as Meeseeks" or "it shows up under a generic name, MetaVendor on GNOME").
+- Monitor name in pickers: decided 2026-11-15. The README names no monitor. The marker that held the place for that line in *How to use it* is dropped, and nothing stands in its place.
 - Sections 8 and 9: Rick's texts say things that are not true of Meeseeks (three platforms, moving and deleting files, crates and modules), so they are not copied. The README has a first draft of Meeseeks's own, written 2026-11-15, for Serge to edit; from then on they are fixed texts like the others.
 
 ## 6. Issue draft — "Release workflow and README"

@@ -70,7 +70,7 @@ Start Meeseeks, pick a resolution, press Start and confirm the dialog your deskt
 
 Meeseeks also has a teleporter mode: click anywhere in the Meeseeks window and your pointer jumps to that spot on the virtual monitor. For it to work, allow remote control when the system asks; on GNOME that is the switch "Allow Remote Interaction" in the dialog at Start, and it is off by default. The click that takes you there is not passed on, so clicking something on the monitor takes a second click. During a demo this keeps you from getting sidetracked when the pointer slips off the edge.
 
-Sharing in a meeting: in Zoom, Meet, Teams or whatever you use, share a screen, not a window, and pick the virtual monitor. *(pending: one line naming the monitor as it appears in the picker, once the GNOME rename result is known.)* Everything on it goes out; everything else stays private. Switch between apps on it as you like, and if one of them crashes, the share stays up.
+Sharing in a meeting: in Zoom, Meet, Teams or whatever you use, share a screen, not a window, and pick the virtual monitor. Everything on it goes out; everything else stays private. Switch between apps on it as you like, and if one of them crashes, the share stays up.
 
 Recording: in OBS or your recorder, add the virtual monitor as a screen source. You get a video at exactly the resolution you picked, with nothing else in the frame.
 
