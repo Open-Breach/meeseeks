@@ -152,7 +152,7 @@ fn wayland_session() -> Check {
         Check::fail(
             name,
             "This is not a Wayland session. X11 is not supported; log in to a \
-             GNOME or KDE Plasma session on Wayland.",
+             Wayland session of GNOME or of KDE Plasma 6.5 or later.",
         )
     }
 }
@@ -163,12 +163,13 @@ fn desktop() -> Check {
         (Desktop::Gnome | Desktop::Kde, current) => Check::pass(format!("{name}: {current}")),
         (Desktop::Other, current) if current.is_empty() => Check::warn(
             name,
-            "XDG_CURRENT_DESKTOP is not set. Meeseeks is made for GNOME and KDE Plasma; \
-             it may not work here.",
+            "XDG_CURRENT_DESKTOP is not set. Meeseeks is made for GNOME and for KDE \
+             Plasma 6.5 or later; it may not work here.",
         ),
         (Desktop::Other, current) => Check::warn(
             format!("{name}: {current}"),
-            "Meeseeks is made for GNOME and KDE Plasma; it may not work here.",
+            "Meeseeks is made for GNOME and for KDE Plasma 6.5 or later; it may not \
+             work here.",
         ),
     }
 }
@@ -271,14 +272,24 @@ async fn screencast(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) 
     };
     match source_types(bus).await {
         Ok(types) if types & SOURCE_TYPE_VIRTUAL != 0 => Check::pass(name),
-        Ok(types) => Check::fail(
-            name,
-            format!(
-                "The ScreenCast portal of this desktop cannot create virtual \
-                 monitors (its source types are {types}, without the 4 for \
-                 virtual). GNOME can, and KDE Plasma from 6.5 on."
-            ),
-        ),
+        Ok(types) => {
+            // An older Plasma gives no monitor at all, so that is said outright.
+            let who_can = match desktop::current().0 {
+                Desktop::Kde => {
+                    "KDE Plasma can from 6.5 on, so this Plasma is older: Meeseeks needs \
+                     Plasma 6.5 or later."
+                }
+                _ => "GNOME can, and KDE Plasma 6.5 or later.",
+            };
+            Check::fail(
+                name,
+                format!(
+                    "The ScreenCast portal of this desktop cannot create virtual \
+                     monitors (its source types are {types}, without the 4 for \
+                     virtual). {who_can}"
+                ),
+            )
+        }
         Err(err) => {
             log::warn!("{SCREENCAST_INTERFACE} does not answer: {err}");
             Check::fail(
@@ -427,7 +438,8 @@ mod tests {
         match name {
             WAYLAND_SESSION => "X11 is not supported.",
             DESKTOP => {
-                "GNOME or KDE Plasma. On any other desktop Meeseeks warns and starts all the same."
+                "GNOME, or KDE Plasma 6.5 or later. On any other desktop Meeseeks warns and \
+                 starts all the same."
             }
             PIPEWIRE => "The PipeWire daemon of your session.",
             PORTAL => {
@@ -435,11 +447,12 @@ mod tests {
                  xdg-desktop-portal-kde."
             }
             SCREENCAST => {
-                "This is what makes the monitor. GNOME has it, and KDE Plasma from 6.5 on."
+                "This is what makes the monitor. GNOME has it, and KDE Plasma 6.5 or later; \
+                 an older Plasma gives no monitor at all."
             }
             REMOTE_CONTROL => {
-                "Only teleporter mode needs it, and only GNOME is asked for it so far. \
-                 Without it you still get the monitor."
+                "Only teleporter mode needs it. Meeseeks asks GNOME for it, and KDE Plasma \
+                 6.6 or later. You get the monitor without it too."
             }
             PIPEWIRESRC => {
                 "The GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; Debian and \

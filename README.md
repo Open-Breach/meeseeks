@@ -35,11 +35,11 @@ One caveat: Meeseeks reaches deep into the desktop, so it needs a few things in 
 
 <!-- generated:requirements -->
 - **Wayland session.** X11 is not supported.
-- **Desktop.** GNOME or KDE Plasma. On any other desktop Meeseeks warns and starts all the same.
+- **Desktop.** GNOME, or KDE Plasma 6.5 or later. On any other desktop Meeseeks warns and starts all the same.
 - **PipeWire running.** The PipeWire daemon of your session.
 - **xdg-desktop-portal.** With the backend for your desktop: xdg-desktop-portal-gnome or xdg-desktop-portal-kde.
-- **ScreenCast portal with virtual monitors.** This is what makes the monitor. GNOME has it, and KDE Plasma from 6.5 on.
-- **Remote control, for the teleporter.** Only teleporter mode needs it, and only GNOME is asked for it so far. Without it you still get the monitor.
+- **ScreenCast portal with virtual monitors.** This is what makes the monitor. GNOME has it, and KDE Plasma 6.5 or later; an older Plasma gives no monitor at all.
+- **Remote control, for the teleporter.** Only teleporter mode needs it. Meeseeks asks GNOME for it, and KDE Plasma 6.6 or later. You get the monitor without it too.
 - **GStreamer element pipewiresrc.** The GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; Debian and Ubuntu: gstreamer1.0-pipewire; Arch: gst-plugin-pipewire).
 - **GTK 4 renderer.** GL by default; the options have Vulkan and Cairo. If the one asked for does not start, GTK falls back to another and Meeseeks says so.
 <!-- /generated:requirements -->
