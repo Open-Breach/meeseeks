@@ -4,6 +4,9 @@
  * whichever one the consumer asks for. Its own preference is 1280x720, so a
  * 1920x1080 result can only come from the consumer's request.
  *
+ * With PRODUCER_SIZE=<width>x<height> it is like KWin's instead: the monitor
+ * has that size before anybody asks, and the stream comes in no other.
+ *
  * The picture has a 12 pixel white edge around a gradient with a bar moving
  * across it, so a screenshot shows whether it is drawn unscaled and whether it
  * is still updating.
@@ -11,6 +14,7 @@
  * It prints "node id: <n>" once the stream exists; the mock portal reads that.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -169,15 +173,27 @@ int main(int argc, char *argv[])
 			&stream_events, &d);
 	d.timer = pw_loop_add_timer(pw_main_loop_get_loop(d.loop), on_timeout, &d);
 
+	/* Any size the consumer asks for, as Mutter's virtual monitor takes
+	 * it; or, with PRODUCER_SIZE=<width>x<height>, that size and no other,
+	 * as KWin's does, which is made before anybody asks. */
+	unsigned int width = 0, height = 0;
+	const char *fixed = getenv("PRODUCER_SIZE");
+	if (fixed != NULL && sscanf(fixed, "%ux%u", &width, &height) != 2) {
+		fprintf(stderr, "PRODUCER_SIZE is not <width>x<height>: %s\n", fixed);
+		return 1;
+	}
+	struct spa_rectangle smallest = SPA_RECTANGLE(1, 1), largest = SPA_RECTANGLE(8192, 8192);
+	struct spa_rectangle preferred = SPA_RECTANGLE(1280, 720);
+	if (fixed != NULL)
+		smallest = largest = preferred = SPA_RECTANGLE(width, height);
+
 	params[0] = spa_pod_builder_add_object(&b,
 		SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
 		SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video),
 		SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
 		SPA_FORMAT_VIDEO_format, SPA_POD_Id(SPA_VIDEO_FORMAT_BGRx),
 		SPA_FORMAT_VIDEO_size, SPA_POD_CHOICE_RANGE_Rectangle(
-			&SPA_RECTANGLE(1280, 720),
-			&SPA_RECTANGLE(1, 1),
-			&SPA_RECTANGLE(8192, 8192)),
+			&preferred, &smallest, &largest),
 		SPA_FORMAT_VIDEO_framerate, SPA_POD_Fraction(&SPA_FRACTION(0, 1)),
 		SPA_FORMAT_VIDEO_maxFramerate, SPA_POD_CHOICE_RANGE_Fraction(
 			&SPA_FRACTION(60, 1),

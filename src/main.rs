@@ -131,8 +131,21 @@ impl Shell {
         });
     }
 
-    async fn open(self: &Rc<Self>, size: (i32, i32)) -> Result<Running, Box<dyn Error>> {
+    async fn open(self: &Rc<Self>, chosen: (i32, i32)) -> Result<Running, Box<dyn Error>> {
         let (session, stream, pointer) = Session::start().await?;
+        // Where the desktop has made the monitor already, at a size of its
+        // own, that size is the one to show; the stream is asked for none.
+        // Everywhere else the size asked of the stream is the chosen one.
+        let size = match stream
+            .size
+            .filter(|&(width, height)| width > 0 && height > 0)
+        {
+            Some(made) => {
+                self.take_size(made, chosen);
+                None
+            }
+            None => Some(chosen),
+        };
 
         // The pipeline calls this from its own bus handler; stop from a fresh
         // main loop turn rather than tearing the pipeline down under it.
@@ -287,6 +300,26 @@ impl Shell {
         });
     }
 
+    /// The desktop has made the monitor `made` large, whatever was chosen.
+    /// The selector, the settings and the window follow.
+    fn take_size(&self, made: (i32, i32), chosen: (i32, i32)) {
+        if made == chosen {
+            return;
+        }
+        log::info!(
+            "the desktop made the monitor {}×{}, not the {}×{} chosen; the window follows",
+            made.0,
+            made.1,
+            chosen.0,
+            chosen.1
+        );
+        self.selector.set_size(made);
+        self.remember(made);
+        self.give_stage(self.selector.picture_area());
+        // Again, for the lock to hold the window at the new size.
+        self.hold_window();
+    }
+
     /// Keeps the size for the next time the app is started.
     fn remember(&self, (width, height): (i32, i32)) {
         let mut settings = self.settings.borrow_mut();
@@ -436,7 +469,10 @@ fn build_window(
     overridden: options::Overridden,
     restart: Rc<Cell<bool>>,
 ) {
-    let selector = Selector::new((settings.width, settings.height));
+    let selector = Selector::new(
+        (settings.width, settings.height),
+        desktop::current().0.decides_size(),
+    );
 
     // Contain scales the picture to fit and keeps its aspect ratio; what is
     // left over of the window stays empty.

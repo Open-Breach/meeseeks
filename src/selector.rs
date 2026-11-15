@@ -31,6 +31,17 @@ const FIT_MARGIN: i32 = 90;
 const ICON: &[u8] = include_bytes!("../assets/icon/meeseeks-icon-192.png");
 const ICON_SIZE: i32 = 96;
 
+/// What the selector is headed with: where there is a size to choose, and
+/// where the desktop decides it.
+const TITLE: &str = "Choose a size";
+const TITLE_GIVEN: &str = "Virtual monitor";
+
+/// What is said under the sizes: why some are grey, or, where the desktop
+/// decides the size, that it does.
+const LEGEND_FIT: &str = "Greyed-out sizes do not fit on this screen.";
+const LEGEND_GIVEN: &str = "On KDE Plasma the desktop decides the size of the monitor. \
+                            The window follows at Start.";
+
 /// What the line under the Start button says: before Start, and while the
 /// desktop is being asked.
 const HINT_IDLE: &str = "Your desktop asks before the new screen appears.";
@@ -38,15 +49,19 @@ const HINT_BUSY: &str = "Waiting for your desktop…";
 
 pub struct Selector {
     root: gtk::ScrolledWindow,
-    /// The presets and the custom size.
+    /// The presets and the custom size, with the line under them.
     sizes: gtk::Box,
+    /// Whether the desktop decides the size of the monitor. There is then
+    /// nothing to choose: the sizes show what the monitor had last time.
+    given: bool,
     screen: gtk::Label,
     presets: Vec<((i32, i32), gtk::ToggleButton)>,
     width: gtk::SpinButton,
     height: gtk::SpinButton,
     warning: gtk::Box,
     warning_text: gtk::Label,
-    /// Says why some presets are grey; shown as long as one is.
+    /// Says why some presets are grey, as long as one is; or that the
+    /// desktop decides the size.
     legend: gtk::Label,
     start: gtk::Button,
     hint: gtk::Label,
@@ -59,8 +74,9 @@ pub struct Selector {
 }
 
 impl Selector {
-    /// A selector with `size` chosen.
-    pub fn new(size: (i32, i32)) -> Rc<Self> {
+    /// A selector with `size` chosen. `given` says that the desktop decides
+    /// the size of the monitor, see `Desktop::decides_size`.
+    pub fn new(size: (i32, i32), given: bool) -> Rc<Self> {
         let head = gtk::Box::new(gtk::Orientation::Vertical, 12);
         if let Ok(icon) = gdk::Texture::from_bytes(&glib::Bytes::from_static(ICON)) {
             head.append(
@@ -75,7 +91,7 @@ impl Selector {
         let titles = gtk::Box::new(gtk::Orientation::Vertical, 4);
         titles.append(
             &gtk::Label::builder()
-                .label("Choose a size")
+                .label(if given { TITLE_GIVEN } else { TITLE })
                 .css_classes(["mk-title-1"])
                 .build(),
         );
@@ -147,10 +163,12 @@ impl Selector {
         list.append(&row("Custom", &custom));
 
         let legend = gtk::Label::builder()
-            .label("Greyed-out sizes do not fit on this screen.")
+            .label(if given { LEGEND_GIVEN } else { LEGEND_FIT })
             .css_classes(["mk-dim", "mk-caption"])
-            .visible(false)
+            .visible(given)
             .build();
+        // The line stays readable; only what cannot be chosen is grey.
+        list.set_sensitive(!given);
         let sizes = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(10)
@@ -231,6 +249,7 @@ impl Selector {
         let selector = Rc::new(Self {
             root,
             sizes,
+            given,
             screen,
             presets,
             width,
@@ -395,7 +414,7 @@ impl Selector {
             button.set_active(fits && *preset == size);
         }
         self.syncing.set(false);
-        self.legend.set_visible(!all_fit);
+        self.legend.set_visible(self.given || !all_fit);
 
         self.warning.set_visible(!self.fits(size));
         if let Some((room_w, room_h)) = self.available.get() {
