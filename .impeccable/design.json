@@ -1,0 +1,639 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T00:00:00Z",
+  "title": "Design System: Meeseeks",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "GNOME blue",
+        "canonical": "#1C71D8",
+        "source": "@mk_accent in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.093 256)",
+          "oklch(27% 0.118 256)",
+          "oklch(38% 0.141 256)",
+          "oklch(50% 0.166 256)",
+          "oklch(62% 0.162 256)",
+          "oklch(73% 0.139 256)",
+          "oklch(85% 0.114 256)",
+          "oklch(95% 0.093 256)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Blue, pointer over",
+        "canonical": "#1A65C2",
+        "source": "@mk_accent_hover in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.085 257)",
+          "oklch(27% 0.108 257)",
+          "oklch(38% 0.129 257)",
+          "oklch(50% 0.152 257)",
+          "oklch(62% 0.149 257)",
+          "oklch(73% 0.128 257)",
+          "oklch(85% 0.105 257)",
+          "oklch(95% 0.085 257)"
+        ]
+      },
+      "accent-active": {
+        "role": "primary",
+        "displayName": "Blue, pressed",
+        "canonical": "#1657A8",
+        "source": "@mk_accent_active in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.076 257)",
+          "oklch(27% 0.097 257)",
+          "oklch(38% 0.116 257)",
+          "oklch(50% 0.136 257)",
+          "oklch(62% 0.133 257)",
+          "oklch(73% 0.114 257)",
+          "oklch(85% 0.094 257)",
+          "oklch(95% 0.076 257)"
+        ]
+      },
+      "start-waiting": {
+        "role": "primary",
+        "displayName": "Pale blue, waiting",
+        "canonical": "#8DB6EB",
+        "source": "literal in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.047 255)",
+          "oklch(27% 0.059 255)",
+          "oklch(38% 0.071 255)",
+          "oklch(50% 0.083 255)",
+          "oklch(62% 0.081 255)",
+          "oklch(73% 0.070 255)",
+          "oklch(85% 0.057 255)",
+          "oklch(95% 0.047 255)"
+        ]
+      },
+      "collar-top": {
+        "role": "secondary",
+        "displayName": "Collar slate, top",
+        "canonical": "#434C5C",
+        "source": "literal in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.015 262)",
+          "oklch(27% 0.020 262)",
+          "oklch(38% 0.023 262)",
+          "oklch(50% 0.028 262)",
+          "oklch(62% 0.027 262)",
+          "oklch(73% 0.023 262)",
+          "oklch(85% 0.019 262)",
+          "oklch(95% 0.015 262)"
+        ]
+      },
+      "collar-bottom": {
+        "role": "secondary",
+        "displayName": "Collar slate, bottom",
+        "canonical": "#252C37",
+        "source": "literal in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.012 259)",
+          "oklch(27% 0.015 259)",
+          "oklch(38% 0.018 259)",
+          "oklch(50% 0.021 259)",
+          "oklch(62% 0.021 259)",
+          "oklch(73% 0.018 259)",
+          "oklch(85% 0.015 259)",
+          "oklch(95% 0.012 259)"
+        ]
+      },
+      "destructive": {
+        "role": "tertiary",
+        "displayName": "Stop red",
+        "canonical": "#C01C28",
+        "source": "@mk_destructive in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.103 25)",
+          "oklch(27% 0.131 25)",
+          "oklch(38% 0.156 25)",
+          "oklch(50% 0.184 25)",
+          "oklch(62% 0.179 25)",
+          "oklch(73% 0.154 25)",
+          "oklch(85% 0.126 25)",
+          "oklch(95% 0.103 25)"
+        ]
+      },
+      "destructive-hover": {
+        "role": "tertiary",
+        "displayName": "Stop red, pointer over",
+        "canonical": "#A91822",
+        "source": "literal in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.094 25)",
+          "oklch(27% 0.119 25)",
+          "oklch(38% 0.142 25)",
+          "oklch(50% 0.167 25)",
+          "oklch(62% 0.163 25)",
+          "oklch(73% 0.140 25)",
+          "oklch(85% 0.115 25)",
+          "oklch(95% 0.094 25)"
+        ]
+      },
+      "destructive-active": {
+        "role": "tertiary",
+        "displayName": "Stop red, pressed",
+        "canonical": "#96141D",
+        "source": "literal in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.086 25)",
+          "oklch(27% 0.109 25)",
+          "oklch(38% 0.130 25)",
+          "oklch(50% 0.153 25)",
+          "oklch(62% 0.149 25)",
+          "oklch(73% 0.128 25)",
+          "oklch(85% 0.105 25)",
+          "oklch(95% 0.086 25)"
+        ]
+      },
+      "error-bg": {
+        "role": "tertiary",
+        "displayName": "Failure tint",
+        "canonical": "#FDEBEC",
+        "source": "@mk_error_bg in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.010 14)",
+          "oklch(27% 0.013 14)",
+          "oklch(38% 0.016 14)",
+          "oklch(50% 0.018 14)",
+          "oklch(62% 0.018 14)",
+          "oklch(73% 0.015 14)",
+          "oklch(85% 0.013 14)",
+          "oklch(95% 0.010 14)"
+        ]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Warning ink",
+        "canonical": "#8A5300",
+        "source": "@mk_warning in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.058 67)",
+          "oklch(27% 0.073 67)",
+          "oklch(38% 0.087 67)",
+          "oklch(50% 0.103 67)",
+          "oklch(62% 0.100 67)",
+          "oklch(73% 0.086 67)",
+          "oklch(85% 0.071 67)",
+          "oklch(95% 0.058 67)"
+        ]
+      },
+      "sign-amber": {
+        "role": "tertiary",
+        "displayName": "Sign amber",
+        "canonical": "#E5A50A",
+        "source": "AMBER in src/pictograms.rs",
+        "tonalRamp": [
+          "oklch(15% 0.082 80)",
+          "oklch(27% 0.105 80)",
+          "oklch(38% 0.125 80)",
+          "oklch(50% 0.147 80)",
+          "oklch(62% 0.143 80)",
+          "oklch(73% 0.123 80)",
+          "oklch(85% 0.101 80)",
+          "oklch(95% 0.082 80)"
+        ]
+      },
+      "pass-green": {
+        "role": "tertiary",
+        "displayName": "Pass green",
+        "canonical": "#1B8553",
+        "source": "GREEN in src/pictograms.rs",
+        "tonalRamp": [
+          "oklch(15% 0.064 157)",
+          "oklch(27% 0.081 157)",
+          "oklch(38% 0.097 157)",
+          "oklch(50% 0.114 157)",
+          "oklch(62% 0.111 157)",
+          "oklch(73% 0.095 157)",
+          "oklch(85% 0.078 157)",
+          "oklch(95% 0.064 157)"
+        ]
+      },
+      "window-bg": {
+        "role": "neutral",
+        "displayName": "Window ground",
+        "canonical": "#FAFAFB",
+        "source": "@mk_window_bg in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(73% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "card-bg": {
+        "role": "neutral",
+        "displayName": "Card white",
+        "canonical": "#FFFFFF",
+        "source": "@mk_card_bg in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(73% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "card-border": {
+        "role": "neutral",
+        "displayName": "Card border",
+        "canonical": "#E0E0E3",
+        "source": "@mk_card_border in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.002 286)",
+          "oklch(27% 0.003 286)",
+          "oklch(38% 0.003 286)",
+          "oklch(50% 0.004 286)",
+          "oklch(62% 0.004 286)",
+          "oklch(73% 0.003 286)",
+          "oklch(85% 0.003 286)",
+          "oklch(95% 0.002 286)"
+        ]
+      },
+      "row-line": {
+        "role": "neutral",
+        "displayName": "Row line",
+        "canonical": "#EBEBED",
+        "source": "@mk_row_line in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.001 286)",
+          "oklch(27% 0.002 286)",
+          "oklch(38% 0.002 286)",
+          "oklch(50% 0.003 286)",
+          "oklch(62% 0.002 286)",
+          "oklch(73% 0.002 286)",
+          "oklch(85% 0.002 286)",
+          "oklch(95% 0.001 286)"
+        ]
+      },
+      "control-bg": {
+        "role": "neutral",
+        "displayName": "Control ground",
+        "canonical": "#F4F4F5",
+        "source": "@mk_control_bg in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(73% 0 0)",
+          "oklch(85% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "control-hover": {
+        "role": "neutral",
+        "displayName": "Control, pointer over",
+        "canonical": "#EDEDEF",
+        "source": "@mk_control_hover in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.001 286)",
+          "oklch(27% 0.002 286)",
+          "oklch(38% 0.002 286)",
+          "oklch(50% 0.003 286)",
+          "oklch(62% 0.002 286)",
+          "oklch(73% 0.002 286)",
+          "oklch(85% 0.002 286)",
+          "oklch(95% 0.001 286)"
+        ]
+      },
+      "control-active": {
+        "role": "neutral",
+        "displayName": "Control, pressed",
+        "canonical": "#E2E2E5",
+        "source": "@mk_control_active in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.002 286)",
+          "oklch(27% 0.003 286)",
+          "oklch(38% 0.003 286)",
+          "oklch(50% 0.004 286)",
+          "oklch(62% 0.004 286)",
+          "oklch(73% 0.003 286)",
+          "oklch(85% 0.003 286)",
+          "oklch(95% 0.002 286)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Control border",
+        "canonical": "#CFCFD3",
+        "source": "@mk_control_border in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.003 286)",
+          "oklch(27% 0.004 286)",
+          "oklch(38% 0.004 286)",
+          "oklch(50% 0.005 286)",
+          "oklch(62% 0.005 286)",
+          "oklch(73% 0.004 286)",
+          "oklch(85% 0.004 286)",
+          "oklch(95% 0.003 286)"
+        ]
+      },
+      "switch-off": {
+        "role": "neutral",
+        "displayName": "Switch off",
+        "canonical": "#C4C4C8",
+        "source": "@mk_switch_off in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.003 286)",
+          "oklch(27% 0.004 286)",
+          "oklch(38% 0.004 286)",
+          "oklch(50% 0.005 286)",
+          "oklch(62% 0.005 286)",
+          "oklch(73% 0.004 286)",
+          "oklch(85% 0.004 286)",
+          "oklch(95% 0.003 286)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "canonical": "#2E3436",
+        "source": "@mk_text in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.005 220)",
+          "oklch(27% 0.006 220)",
+          "oklch(38% 0.007 220)",
+          "oklch(50% 0.008 220)",
+          "oklch(62% 0.008 220)",
+          "oklch(73% 0.007 220)",
+          "oklch(85% 0.006 220)",
+          "oklch(95% 0.005 220)"
+        ]
+      },
+      "dim": {
+        "role": "neutral",
+        "displayName": "Dim",
+        "canonical": "#5F6569",
+        "source": "@mk_dim in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.005 237)",
+          "oklch(27% 0.007 237)",
+          "oklch(38% 0.008 237)",
+          "oklch(50% 0.009 237)",
+          "oklch(62% 0.009 237)",
+          "oklch(73% 0.008 237)",
+          "oklch(85% 0.006 237)",
+          "oklch(95% 0.005 237)"
+        ]
+      },
+      "disabled": {
+        "role": "neutral",
+        "displayName": "Disabled",
+        "canonical": "#A8ABAE",
+        "source": "@mk_disabled in src/style.rs",
+        "tonalRamp": [
+          "oklch(15% 0.003 248)",
+          "oklch(27% 0.004 248)",
+          "oklch(38% 0.004 248)",
+          "oklch(50% 0.005 248)",
+          "oklch(62% 0.005 248)",
+          "oklch(73% 0.004 248)",
+          "oklch(85% 0.004 248)",
+          "oklch(95% 0.003 248)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title-1": {
+        "displayName": "Title 1",
+        "purpose": ".mk-title-1: the one title of a page (\"Choose a size\", the away message)."
+      },
+      "title-2": {
+        "displayName": "Title 2",
+        "purpose": ".mk-title-2: the sentence at the top of the startup-checks dialog."
+      },
+      "start-word": {
+        "displayName": "Start word",
+        "purpose": ".mk-cap: the white word on the Start cap, with text-shadow 0 1px 1.5px alpha(black, 0.32)."
+      },
+      "heading": {
+        "displayName": "Heading",
+        "purpose": ".mk-heading: the name of a group of options above its card."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Row titles and check names; row labels in dim."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Labels on presets, buttons and the drop-down; 600 on the suggested button, Stop and the default answer."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": ".mk-caption: descriptions, hints and warnings, with .mk-dim or .mk-warning."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card",
+        "value": "0 1px 3px alpha(black, 0.06)",
+        "purpose": "Under every .mk-list card."
+      },
+      {
+        "name": "switch-thumb",
+        "value": "0 1px 2px alpha(black, 0.25)",
+        "purpose": "The thumb of a switch."
+      },
+      {
+        "name": "collar",
+        "value": "inset 0 0 0 1px alpha(white, 0.12), 0 2px 3px alpha(black, 0.22), 0 8px 16px alpha(black, 0.28)",
+        "purpose": "The Start collar's rim and its cast shadow."
+      },
+      {
+        "name": "collar-focus",
+        "value": "0 0 0 4px @mk_accent, 0 2px 3px alpha(black, 0.22), 0 8px 16px alpha(black, 0.28)",
+        "purpose": "The keyboard focus ring around the Start collar (.mk-collar.mk-focus)."
+      },
+      {
+        "name": "cap-rest",
+        "value": "inset 0 2px 1.5px alpha(white, 0.55), inset 0 -4px 9px alpha(black, 0.24), 0 8px 0 #1657A8",
+        "purpose": "Start cap at rest: lighting and the 8 px side wall. Start only."
+      },
+      {
+        "name": "cap-hover",
+        "value": "inset 0 2px 1.5px alpha(white, 0.6), inset 0 -4px 9px alpha(black, 0.22), 0 11px 0 #1657A8",
+        "purpose": "Start cap under the pointer: the wall grows to 11 px."
+      },
+      {
+        "name": "cap-pressed",
+        "value": "inset 0 3px 7px alpha(black, 0.34), inset 0 -2px 5px alpha(black, 0.14), 0 2px 0 #124F9E",
+        "purpose": "Start cap pressed: the wall shrinks to 2 px."
+      },
+      {
+        "name": "cap-waiting",
+        "value": "inset 0 3px 7px alpha(black, 0.2), inset 0 -2px 5px alpha(black, 0.08), 0 2px 0 #6E8FBC",
+        "purpose": "Start cap held down, pale, while the desktop is asked."
+      }
+    ],
+    "motion": [
+      {
+        "name": "cap-return",
+        "value": "transform, box-shadow 160ms cubic-bezier(0.3, 1.5, 0.5, 1); filter 160ms ease-out",
+        "purpose": "The Start cap springing back to rest, with a small overshoot."
+      },
+      {
+        "name": "cap-rise",
+        "value": "120ms ease-out, translateY(-3px), brightness(1.08)",
+        "purpose": "The Start cap rising under the pointer."
+      },
+      {
+        "name": "cap-sink",
+        "value": "80ms ease-out, translateY(6px), brightness(0.9) while pressed",
+        "purpose": "The Start cap sinking when pressed, and staying down while disabled."
+      }
+    ],
+    "breakpoints": [],
+    "platform": {
+      "toolkit": "GTK 4 CSS (gtk4-rs), not web CSS",
+      "tokenSource": "src/style.rs: @define-color mk_* named colours and mk- classes; spacing is set on the widgets in Rust",
+      "note": "Component html/css in this file are web translations for the panel; alpha(c, a) is written as rgba(). The normative values are those in src/style.rs."
+    },
+    "openPoints": [
+      "Finish review: ship, for the headless test desktop only (sway, GTK 4.14 default theme, Cairo renderer, still frames). Not seen: GNOME, KDE, the dialogs' title bars, the Start button's motion.",
+      "No dark palette. Under a dark desktop theme the title bar goes dark and the app's surfaces stay light; whether to add a dark palette is the user's open decision.",
+      "The white word on Start has 4.5:1 at rest and about 4.0:1 under the pointer; large text at an 11 pt system font, not at 10 pt."
+    ]
+  },
+  "components": [
+    {
+      "name": "Start button",
+      "kind": "custom",
+      "refersTo": "start-cap",
+      "description": "The one raised object: a fixed 96 px button holding a moving glossy cap, in a 116 px dark collar. Rises under the pointer, sinks when pressed, stays down and pale while disabled (waiting for the desktop). Web translation of .mk-collar / .mk-start / .mk-cap; GTK's alpha() is written as rgba().",
+      "html": "<div class=\"ds-collar\"><button class=\"ds-start\"><span class=\"ds-cap\">Start</span></button></div>",
+      "css": ".ds-collar { display: inline-block; border-radius: 9999px; background-image: linear-gradient(#434C5C, #252C37); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 2px 3px rgba(0,0,0,0.22), 0 8px 16px rgba(0,0,0,0.28); } .ds-collar:has(.ds-start:focus-visible) { box-shadow: 0 0 0 4px #1C71D8, 0 2px 3px rgba(0,0,0,0.22), 0 8px 16px rgba(0,0,0,0.28); } .ds-start { display: block; width: 96px; height: 96px; margin: 2px 10px 18px; padding: 0; border: none; border-radius: 9999px; outline: none; background: transparent; cursor: pointer; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; font-size: 1em; } .ds-cap { display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; border-radius: 9999px; color: white; font-size: 130%; font-weight: 700; text-shadow: 0 1px 1.5px rgba(0,0,0,0.32); background-color: #1C71D8; background-image: radial-gradient(ellipse 29px 12px at 50% 19px, rgba(255,255,255,0.5), rgba(255,255,255,0.3) 78%, rgba(255,255,255,0)), radial-gradient(circle 79px at 36% 18%, #6AB3F8, #2477DB 20%, #1C71D8 40%, #1860BC); box-shadow: inset 0 2px 1.5px rgba(255,255,255,0.55), inset 0 -4px 9px rgba(0,0,0,0.24), 0 8px 0 #1657A8; transition: transform 160ms cubic-bezier(0.3, 1.5, 0.5, 1), box-shadow 160ms cubic-bezier(0.3, 1.5, 0.5, 1), filter 160ms ease-out; } .ds-start:hover > .ds-cap { transform: translateY(-3px); filter: brightness(1.08); box-shadow: inset 0 2px 1.5px rgba(255,255,255,0.6), inset 0 -4px 9px rgba(0,0,0,0.22), 0 11px 0 #1657A8; transition-duration: 120ms; transition-timing-function: ease-out; } .ds-start:active > .ds-cap, .ds-start:disabled > .ds-cap { transform: translateY(6px); box-shadow: inset 0 3px 7px rgba(0,0,0,0.34), inset 0 -2px 5px rgba(0,0,0,0.14), 0 2px 0 #124F9E; transition-duration: 80ms; transition-timing-function: ease-out; } .ds-start:active > .ds-cap { filter: brightness(0.9); } .ds-start:disabled > .ds-cap { filter: none; color: rgba(255,255,255,0.92); background-color: #8DB6EB; background-image: radial-gradient(ellipse 29px 12px at 50% 19px, rgba(255,255,255,0.16), rgba(255,255,255,0)), radial-gradient(circle 79px at 38% 26%, #B4D2F5, #8DB6EB 60%, #7BA3D9); box-shadow: inset 0 3px 7px rgba(0,0,0,0.2), inset 0 -2px 5px rgba(0,0,0,0.08), 0 2px 0 #6E8FBC; }"
+    },
+    {
+      "name": "Segmented presets",
+      "kind": "chip",
+      "refersTo": "segment",
+      "description": "The sizes of one aspect ratio joined into one outlined control; the chosen one is blue, a size that does not fit is grey. From .mk-segments / .mk-segment.",
+      "html": "<div class=\"ds-segments\"><button class=\"ds-segment\">1280×720</button><button class=\"ds-segment ds-checked\">1920×1080</button><button class=\"ds-segment\" disabled>2560×1440</button></div>",
+      "css": ".ds-segments { display: inline-flex; overflow: hidden; border: 1px solid #CFCFD3; border-radius: 8px; } .ds-segment { margin: 0; padding: 7px 12px; border: none; border-radius: 0; background: #FFFFFF; color: #2E3436; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; font-size: 1em; font-weight: 500; outline: 0 solid transparent; outline-offset: -3px; } .ds-segment:not(:first-child) { border-left: 1px solid #CFCFD3; } .ds-segment:hover { background: #EDEDEF; } .ds-segment:active { background: #E2E2E5; } .ds-segment.ds-checked { background: #1C71D8; color: white; } .ds-segment.ds-checked:hover { background: #1A65C2; } .ds-segment:disabled { background: #F4F4F5; color: #A8ABAE; } .ds-segment:focus-visible { outline: 2px solid #1C71D8; } .ds-segment.ds-checked:focus-visible { outline-color: white; }"
+    },
+    {
+      "name": "List card with rows",
+      "kind": "card",
+      "refersTo": "list-card",
+      "description": "A white rounded card of hairline-separated rows: the selector's sizes, the options, the startup checks. A failed row is tinted and carries the red cross. From .mk-list / .mk-row / .mk-row.mk-failed.",
+      "html": "<div class=\"ds-list\"><div class=\"ds-row\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" role=\"img\" aria-label=\"Passed\"><circle cx=\"10\" cy=\"10\" r=\"9\" fill=\"#1B8553\"/><path d=\"M6 10.3 8.7 13 14.2 7.4\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><div><div>Wayland session</div></div></div><div class=\"ds-row ds-failed\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" role=\"img\" aria-label=\"Failed\"><circle cx=\"10\" cy=\"10\" r=\"9\" fill=\"#C01C28\"/><path d=\"M6.8 6.8 13.2 13.2M13.2 6.8 6.8 13.2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.8\" stroke-linecap=\"round\"/></svg><div><div>A check that failed</div><div class=\"ds-caption\">What to do about it.</div></div></div></div>",
+      "css": ".ds-list { overflow: hidden; background: #FFFFFF; border: 1px solid #E0E0E3; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); color: #2E3436; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; } .ds-row { display: flex; gap: 12px; align-items: flex-start; padding: 11px 16px; } .ds-row:not(:last-child) { border-bottom: 1px solid #EBEBED; } .ds-row.ds-failed { background: #FDEBEC; } .ds-caption { font-size: 87%; color: #5F6569; margin-top: 2px; }"
+    },
+    {
+      "name": "Custom size field",
+      "kind": "input",
+      "refersTo": "spin-field",
+      "description": "A number field with its minus and plus buttons in one outlined shape. From .mk-spin.",
+      "html": "<div class=\"ds-spin\"><input type=\"text\" inputmode=\"numeric\" value=\"1920\" size=\"5\" aria-label=\"Width\"><button aria-label=\"Decrease\">−</button><button aria-label=\"Increase\">+</button></div>",
+      "css": ".ds-spin { display: inline-flex; overflow: hidden; background: #FFFFFF; color: #2E3436; border: 1px solid #CFCFD3; border-radius: 8px; outline: 0 solid transparent; outline-offset: -1px; } .ds-spin:focus-within { outline: 2px solid #1C71D8; } .ds-spin input { border: none; outline: none; background: transparent; color: inherit; padding: 6px 8px; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; font-size: 1em; } .ds-spin button { margin: 0; min-width: 34px; border: none; border-left: 1px solid #CFCFD3; border-radius: 0; background: #F4F4F5; color: #2E3436; font-size: 1em; } .ds-spin button:hover { background: #EDEDEF; } .ds-spin button:active { background: #E2E2E5; } .ds-spin button:disabled { color: #A8ABAE; }"
+    },
+    {
+      "name": "Dialog button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "The plain button at the foot of a dialog (Cancel, Reset to defaults, Copy report). From .mk-button.",
+      "html": "<button class=\"ds-button\">Cancel</button>",
+      "css": ".ds-button { padding: 7px 16px; border: 1px solid #CFCFD3; border-radius: 8px; background: #F4F4F5; color: #2E3436; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; font-size: 1em; font-weight: 500; } .ds-button:hover { background: #EDEDEF; } .ds-button:active { background: #E2E2E5; } .ds-button:focus-visible { outline: 2px solid #1C71D8; outline-offset: 2px; }"
+    },
+    {
+      "name": "Suggested button",
+      "kind": "button",
+      "refersTo": "button-suggested",
+      "description": "The one button of a dialog that goes ahead (Save, Close). From .mk-button.mk-suggested.",
+      "html": "<button class=\"ds-button-suggested\">Save</button>",
+      "css": ".ds-button-suggested { padding: 7px 16px; border: 1px solid #1C71D8; border-radius: 8px; background: #1C71D8; color: white; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; font-size: 1em; font-weight: 600; } .ds-button-suggested:hover { border-color: #1A65C2; background: #1A65C2; } .ds-button-suggested:active { border-color: #1657A8; background: #1657A8; } .ds-button-suggested:focus-visible { outline: 2px solid #1C71D8; outline-offset: 2px; }"
+    },
+    {
+      "name": "Switch",
+      "kind": "input",
+      "refersTo": "switch",
+      "description": "The on/off control of an option: a 46 by 26 round track, grey when off and blue when on, with a white thumb. From .mk-dialog switch.",
+      "html": "<label class=\"ds-switch\"><input type=\"checkbox\" role=\"switch\" checked aria-label=\"Lock window size\"><span></span></label>",
+      "css": ".ds-switch { display: inline-block; position: relative; width: 46px; height: 26px; } .ds-switch input { position: absolute; inset: 0; margin: 0; opacity: 0; } .ds-switch span { display: block; width: 46px; height: 26px; border-radius: 9999px; background: #C4C4C8; } .ds-switch span::after { content: ''; position: absolute; top: 0; left: 0; width: 22px; height: 22px; margin: 2px; border-radius: 9999px; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.25); } .ds-switch input:checked + span { background: #1C71D8; } .ds-switch input:checked + span::after { left: 20px; } .ds-switch input:focus-visible + span { outline: 2px solid #1C71D8; outline-offset: 2px; }"
+    },
+    {
+      "name": "Stop",
+      "kind": "button",
+      "refersTo": "stop",
+      "description": "The red button in the desktop's header bar while the virtual monitor runs: a white square and the word. Its corners are the desktop theme's; 6px here stands in for them. From .mk-stop / .mk-stop-square.",
+      "html": "<button class=\"ds-stop\"><span class=\"ds-stop-square\"></span>Stop</button>",
+      "css": ".ds-stop { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border: none; border-radius: 6px; background: #C01C28; color: white; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; font-size: 1em; font-weight: 600; } .ds-stop:hover { background: #A91822; } .ds-stop:active { background: #96141D; } .ds-stop:focus-visible { outline: 2px solid #C01C28; outline-offset: 2px; } .ds-stop-square { width: 10px; height: 10px; border-radius: 2px; background: white; }"
+    },
+    {
+      "name": "Warning line",
+      "kind": "custom",
+      "refersTo": "list-row",
+      "description": "The amber sign and a line of warning ink: under the custom size when it does not fit, and under an option an environment variable overrides. Pictogram from src/pictograms.rs; text is .mk-warning .mk-caption.",
+      "html": "<div class=\"ds-warning\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" role=\"img\" aria-label=\"Warning\"><path d=\"M10 3.2 17.4 16.4H2.6Z\" fill=\"#E5A50A\" stroke=\"#E5A50A\" stroke-width=\"1.6\" stroke-linejoin=\"round\"/><path d=\"M10 7.8V11.8\" stroke=\"#2E3436\" stroke-width=\"1.8\" stroke-linecap=\"round\"/><circle cx=\"10\" cy=\"14.5\" r=\"1\" fill=\"#2E3436\"/></svg><span>This size does not fit on your screen.</span></div>",
+      "css": ".ds-warning { display: inline-flex; align-items: center; gap: 8px; color: #8A5300; font-size: 87%; font-family: system-ui, 'Adwaita Sans', 'Noto Sans', Cantarell, sans-serif; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The ordinary utility with one button",
+    "overview": "Meeseeks looks like a well-made GNOME utility written in plain GTK: a near-white window, one white rounded card of hairline-separated rows, linked segmented presets, and a single blue for whatever is chosen or goes ahead. It greets with its icon, asks one thing (\"Choose a size\"), and offers one round button. Nothing in it is meant to be noticed twice; the user is seconds from a call and should forget the window once the picture is up.\n\nThe one object with depth is Start: a glossy blue cap standing 8 px proud of a dark collar, like the button on the box in the app's icon. It rises under the pointer, sinks when pressed, and stays down, paler, while the desktop is asked. Everything else is flat: fills, 1 px borders, and one faint shadow under the cards.\n\nThe app styles only what it marks with its own classes. The title bars, the Options button in the header bar, the drop-down's arrow and its pop-up list are the desktop theme's, on purpose, so that the window is at home on GNOME and on KDE. No libadwaita, and no font is shipped. (The name of the North Star is taken from the direction contract's thesis; the user has not been asked to confirm it as a name.)",
+    "keyCharacteristics": [
+      "Light surfaces only: window `#FAFAFB`, cards white, one blue (`#1C71D8`).",
+      "One raised object, the Start button; all other controls are flat.",
+      "Lists of rows on white cards with 12 px corners; controls with 8 px corners; round things fully round.",
+      "The system UI font at relative sizes; weight, not a second face, makes the hierarchy.",
+      "Colour for state is never alone: a failed row has a tint and a pictogram, a warning has a sign and words.",
+      "The desktop theme keeps its title bars and its own widgets' chrome."
+    ],
+    "rules": [
+      {
+        "name": "The One Blue Rule",
+        "body": "Blue means \"chosen\" or \"goes ahead\": the chosen preset, a switch that is on, Save, Start, the focus ring. It is not used for decoration, headings or links.",
+        "section": "colors"
+      },
+      {
+        "name": "The State Colours Rule",
+        "body": "Red is for Stop and for what failed, amber for warnings, green for what passed. Each comes with a pictogram or a word; none of them carries its meaning by colour alone.",
+        "section": "colors"
+      },
+      {
+        "name": "The System Font Rule",
+        "body": "The font is the desktop's. Sizes are relative (160 %, 133 %, 130 %, 87 %), never in pixels or points.",
+        "section": "typography"
+      },
+      {
+        "name": "The Still Row Rule",
+        "body": "The chosen preset keeps the weight of the others (500). Choosing changes colour only, so the row does not shift.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Raised Thing Rule",
+        "body": "Start is the only object with depth. Gloss, a collar, a side wall and a cast shadow appear on it and nowhere else.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take colours from the named colours in `src/style.rs` (`@mk_*`) and prefix every new class with `mk-`.",
+      "Do put groups of settings or results in a `.mk-list` card of `.mk-row` rows, and give a dialog exactly one `.mk-suggested` button.",
+      "Do give every control the app restyles its own focus ring: 2 px `@mk_accent`, as the existing ones have.",
+      "Do pair every state colour with a pictogram or words, as the failed row and the warnings do.",
+      "Do draw new pictograms with cairo in `src/pictograms.rs`, with round-ended strokes and an accessible name, so they look the same under any icon theme.",
+      "Do keep sizes relative to the system font (160 %, 133 %, 130 %, 87 %) and spacing on the steps in use (2, 4, 8, 10, 12, 16, 20, 24 px).",
+      "Do keep the Start button's press target still and move only the cap inside it."
+    ],
+    "donts": [
+      "Don't style the title bars or the theme's own widgets beyond what is listed here; the header bar, the Options button and the drop-down's pop-up are the desktop's.",
+      "Don't give a second object depth: no gloss, collar, side wall or large cast shadow on anything but Start.",
+      "Don't use red for anything but Stop and failures, or blue for anything but what is chosen, what goes ahead, and focus.",
+      "Don't ship or name a font, and don't set sizes in pixels or points.",
+      "Don't use libadwaita; the app is plain GTK 4 so that it is at home on KDE as well as GNOME.",
+      "Don't make the chosen preset bolder than the others; the row must not shift when the choice changes."
+    ]
+  }
+}

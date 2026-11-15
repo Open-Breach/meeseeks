@@ -10,11 +10,13 @@ mod environment;
 mod input;
 mod mirror;
 mod options;
+mod pictograms;
 mod pointer;
 mod renderer;
 mod selector;
 mod session;
 mod settings;
+mod style;
 
 use std::cell::{Cell, RefCell};
 use std::error::Error;
@@ -39,6 +41,8 @@ const AWAY: &str = "away";
 /// What the window says, in place of the picture, while it is on its own
 /// virtual monitor.
 const AWAY_MESSAGE: &str = "Move this window back to a physical screen.";
+const AWAY_REASON: &str =
+    "It is on its own virtual monitor. The picture is paused until it is back.";
 
 /// A started virtual monitor: the portal session that keeps it alive and the
 /// pipeline that shows it.
@@ -365,7 +369,6 @@ fn build_window(
     overridden: options::Overridden,
     restart: Rc<Cell<bool>>,
 ) {
-    selector::load_css();
     let selector = Selector::new((settings.width, settings.height));
 
     // Contain scales the picture to fit and keeps its aspect ratio; what is
@@ -376,12 +379,30 @@ fn build_window(
     // Lets GTK hand DMA-BUF frames to the compositor as they are.
     let offload = gtk::GraphicsOffload::builder().child(&picture).build();
 
-    let away = gtk::Label::builder()
-        .label(AWAY_MESSAGE)
-        .wrap(true)
-        .justify(gtk::Justification::Center)
-        .css_classes(["title-2"])
+    let message = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    for (text, classes) in [(AWAY_MESSAGE, "mk-title-1"), (AWAY_REASON, "mk-dim")] {
+        message.append(
+            &gtk::Label::builder()
+                .label(text)
+                .wrap(true)
+                .justify(gtk::Justification::Center)
+                .css_classes([classes])
+                .build(),
+        );
+    }
+    let sign = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(16)
+        .valign(gtk::Align::Center)
+        .vexpand(true)
+        .margin_start(24)
+        .margin_end(24)
         .build();
+    sign.append(&pictograms::move_back());
+    sign.append(&message);
+    let away = gtk::Box::builder().css_classes(["mk-page"]).build();
+    sign.set_hexpand(true);
+    away.append(&sign);
 
     let pages = gtk::Stack::new();
     pages.add_named(selector.widget(), Some(SELECTOR));
@@ -404,9 +425,18 @@ fn build_window(
     stage.add_overlay(&watcher);
     stage.add_overlay(&pages);
 
+    // A white square and the word, as on any player.
+    let stop_face = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    stop_face.append(
+        &gtk::Box::builder()
+            .css_classes(["mk-stop-square"])
+            .valign(gtk::Align::Center)
+            .build(),
+    );
+    stop_face.append(&gtk::Label::new(Some("Stop")));
     let stop = gtk::Button::builder()
-        .label("Stop")
-        .css_classes(["destructive-action"])
+        .child(&stop_face)
+        .css_classes(["mk-stop"])
         .visible(false)
         .build();
     let options = gtk::Button::with_mnemonic("_Options");
@@ -528,6 +558,7 @@ fn activate(
     environment: &Environment,
     restart: Rc<Cell<bool>>,
 ) {
+    style::load();
     let asked = environment.asked;
     let overridden = options::Overridden {
         renderer: environment.renderer_overridden,
