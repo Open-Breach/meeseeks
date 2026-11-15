@@ -249,7 +249,20 @@ const CSS: &str = r#"
 .mk-dialog dropdown > button:focus-visible { outline: 2px solid @mk_accent; outline-offset: 2px; }
 
 /* The question GTK asks before the restart: the answer that goes ahead. */
-window.dialog.message button.default { color: @mk_accent; font-weight: 600; }
+window.dialog.message,
+window.dialog.message .titlebar {
+  background-image: none;
+  background-color: @mk_card_bg;
+  color: @mk_text;
+}
+window.dialog.message .dialog-action-area > button {
+  background-image: none;
+  background-color: @mk_card_bg;
+  color: @mk_text;
+}
+window.dialog.message .dialog-action-area > button:hover { background-color: @mk_control_hover; }
+window.dialog.message .dialog-action-area > button:active { background-color: @mk_control_active; }
+window.dialog.message .dialog-action-area > button.default { color: @mk_accent; font-weight: 600; }
 
 /* Stop, in the title bar. */
 .mk-stop {
