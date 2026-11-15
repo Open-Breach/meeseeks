@@ -1,12 +1,12 @@
 # Meeseeks
 
 <!-- generated:status -->
-0.9.0, tested on GNOME Wayland. KDE untested.
+0.9.1, tested on GNOME and KDE Plasma, Wayland.
 <!-- /generated:status -->
 
 This README describes the latest release, not `main`.
 
-[Download 0.9.0](#install), try it, and tell us [what breaks](https://github.com/Open-Breach/meeseeks/issues). [Opinions](https://github.com/Open-Breach/meeseeks/issues) welcome too, good or bad, as long as they're respectful.
+[Download 0.9.1](#install), try it, and tell us [what breaks](https://github.com/Open-Breach/meeseeks/issues). [Opinions](https://github.com/Open-Breach/meeseeks/issues) welcome too, good or bad, as long as they're respectful.
 
 ## What it is
 
@@ -46,17 +46,17 @@ One caveat: Meeseeks reaches deep into the desktop, so it needs a few things in 
 
 And one thing no check can tell you, because without it Meeseeks does not start at all: GTK 4.14, GStreamer 1.24 and glibc 2.39, or newer. Ubuntu 24.04, Fedora 40 with its updates and Debian 13 have them, and so does everything newer.
 
-Tested on: Fedora 45, GNOME 51.1, Wayland.
+Tested on: Fedora 45, GNOME 51.1, Wayland; KDE Plasma, Wayland.
 
 Not sure? Just start Meeseeks. It checks each requirement and tells you what's missing.
 
 ## Install
 
 <!-- generated:install -->
-**Linux x86_64** · [meeseeks-0.9.0-linux-x64.tar.gz](https://github.com/Open-Breach/meeseeks/releases/download/v0.9.0/meeseeks-0.9.0-linux-x64.tar.gz)
+**Linux x86_64** · [meeseeks-0.9.1-linux-x64.tar.gz](https://github.com/Open-Breach/meeseeks/releases/download/v0.9.1/meeseeks-0.9.1-linux-x64.tar.gz)
 
 ```bash
-tar xzf meeseeks-0.9.0-linux-x64.tar.gz && ./meeseeks-0.9.0-linux-x64/meeseeks
+tar xzf meeseeks-0.9.1-linux-x64.tar.gz && ./meeseeks-0.9.1-linux-x64/meeseeks
 ```
 
 [Rick](https://github.com/Open-Breach/rick)'s tarball installer installs and uninstalls it in one click.
@@ -83,7 +83,7 @@ Done? Press Stop. The monitor disappears and the desktop moves any windows left 
 Meeseeks is open source under [Apache-2.0](LICENSE) and we want company.
 
 - **Try it and tell us.** Open an [issue](https://github.com/Open-Breach/meeseeks/issues) for anything that crashes, looks wrong or is missing. Say which desktop and distribution you run, and paste what the terminal printed.
-- **Tell us where it runs.** Meeseeks has been tested on one GNOME desktop so far. A report from KDE Plasma or from another distribution, working or not, is worth a lot.
+- **Tell us where it runs.** Meeseeks has been tested on one GNOME desktop and one KDE Plasma desktop so far. A report from another distribution, working or not, is worth a lot.
 - **Review the code.** Because so much of it is agent-written, a second pair of human eyes on any pull request is worth more here than in most projects.
 - **Build something.** [docs/building.md](docs/building.md) takes you from a checkout to a running window, and [SPEC.md](SPEC.md) says what Meeseeks is and what it leaves out.
 

@@ -53,7 +53,7 @@ A release is cut by a tag: [readme-and-release.md](readme-and-release.md) has th
 ```bash
 cargo build --release
 cargo about generate about.hbs -o THIRD-PARTY-LICENSES.md
-.github/scripts/tarball.sh 0.9.0
+.github/scripts/tarball.sh 0.9.1
 ```
 
 The second line needs [cargo-about](https://github.com/EmbarkStudios/cargo-about) (`cargo install cargo-about --features cli`).
