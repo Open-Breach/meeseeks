@@ -5,8 +5,8 @@
 use std::io;
 use std::rc::Rc;
 
-use gtk::gio;
 use gtk::prelude::*;
+use gtk::{gdk, gio, glib};
 
 use crate::pictograms;
 use crate::renderer::Renderer;
@@ -223,6 +223,21 @@ pub fn show(
             }
         });
     });
+
+    // As in any dialog of the desktop: Return saves, Escape leaves.
+    dialog.set_default_widget(Some(&save_button));
+    let keys = gtk::EventControllerKey::new();
+    let weak = dialog.downgrade();
+    keys.connect_key_pressed(move |_, key, _, _| {
+        if key != gdk::Key::Escape {
+            return glib::Propagation::Proceed;
+        }
+        if let Some(dialog) = weak.upgrade() {
+            dialog.close();
+        }
+        glib::Propagation::Stop
+    });
+    dialog.add_controller(keys);
 
     dialog.present();
 }
