@@ -333,7 +333,6 @@ fn build_window(
     overridden: options::Overridden,
     restart: Rc<Cell<bool>>,
 ) {
-    selector::load_css();
     let selector = Selector::new((settings.width, settings.height));
 
     // Contain scales the picture to fit and keeps its aspect ratio; what is
