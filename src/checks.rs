@@ -244,7 +244,7 @@ async fn screencast(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) 
             format!(
                 "The ScreenCast portal of this desktop cannot create virtual \
                  monitors (its source types are {types}, without the 4 for \
-                 virtual). GNOME and KDE Plasma can."
+                 virtual). GNOME can, and KDE Plasma from 6.5 on."
             ),
         ),
         Err(err) => {
