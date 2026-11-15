@@ -3,6 +3,9 @@ name = "meeseeks"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+# Released as a tarball, not as a crate. It also keeps Meeseeks itself out of
+# the list of third-party licences, see about.toml.
+publish = false
 description = "A virtual monitor shown as a window, for sharing a sane-sized screen"
 
 [dependencies]
