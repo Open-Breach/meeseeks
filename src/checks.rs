@@ -11,6 +11,7 @@ use std::time::Duration;
 use ashpd::zbus;
 use gtk::prelude::*;
 
+use crate::desktop::{self, Desktop};
 use crate::renderer::Renderer;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,13 +64,16 @@ impl Check {
 pub async fn run(asked: Option<Renderer>) -> Vec<Check> {
     let bus = session_bus().await;
     let portal = portal(&bus).await;
-    let screencast = screencast(&bus, portal.status == Status::Pass).await;
+    let portal_answers = portal.status == Status::Pass;
+    let screencast = screencast(&bus, portal_answers).await;
+    let remote_control = remote_control(&bus, portal_answers).await;
     vec![
         wayland_session(),
         desktop(),
         pipewire(),
         portal,
         screencast,
+        remote_control,
         gst_element(
             "pipewiresrc",
             "Install the GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; \
@@ -128,23 +132,17 @@ fn wayland_session() -> Check {
 
 fn desktop() -> Check {
     let name = "Desktop";
-    let current = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
-    let known = current
-        .split(':')
-        .any(|part| part.eq_ignore_ascii_case("GNOME") || part.eq_ignore_ascii_case("KDE"));
-    if known {
-        Check::pass(format!("{name}: {current}"))
-    } else if current.is_empty() {
-        Check::warn(
+    match desktop::current() {
+        (Desktop::Gnome | Desktop::Kde, current) => Check::pass(format!("{name}: {current}")),
+        (Desktop::Other, current) if current.is_empty() => Check::warn(
             name,
             "XDG_CURRENT_DESKTOP is not set. Meeseeks is made for GNOME and KDE Plasma; \
              it may not work here.",
-        )
-    } else {
-        Check::warn(
+        ),
+        (Desktop::Other, current) => Check::warn(
             format!("{name}: {current}"),
             "Meeseeks is made for GNOME and KDE Plasma; it may not work here.",
-        )
+        ),
     }
 }
 
@@ -267,14 +265,69 @@ async fn screencast(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) 
 }
 
 async fn source_types(bus: &zbus::Connection) -> zbus::Result<u32> {
+    portal_property(bus, SCREENCAST_INTERFACE, "AvailableSourceTypes").await
+}
+
+/// Reads one property of one of the portal's interfaces, afresh.
+async fn portal_property(
+    bus: &zbus::Connection,
+    interface: &'static str,
+    property: &str,
+) -> zbus::Result<u32> {
     let proxy: zbus::Proxy = zbus::proxy::Builder::new(bus)
         .destination(PORTAL_NAME)
         .path(PORTAL_PATH)
-        .interface(SCREENCAST_INTERFACE)
+        .interface(interface)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
         .await?;
-    proxy.get_property("AvailableSourceTypes").await
+    proxy.get_property(property).await
+}
+
+const REMOTE_DESKTOP_INTERFACE: &str = "org.freedesktop.portal.RemoteDesktop";
+/// The bit for the pointer in the portal's `AvailableDeviceTypes`.
+const DEVICE_TYPE_POINTER: u32 = 2;
+
+/// Remote control is what the teleporter needs, and nothing else does: a
+/// click on the picture then places the pointer on the virtual monitor. The
+/// app gives a monitor without it, so this warns and never fails. It says
+/// what `Session::start` will find; whether the user allows the pointer is
+/// asked in the desktop's dialog at every Start and cannot be known here.
+async fn remote_control(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) -> Check {
+    let name = "Remote control, for the teleporter";
+    let without = |why: &str| {
+        Check::warn(
+            name,
+            format!(
+                "No teleporter: {why} The monitor works without it; only a click on the \
+                 picture will not place the pointer there."
+            ),
+        )
+    };
+    let bus = match bus {
+        Ok(bus) if portal_answers => bus,
+        _ => return without("it needs xdg-desktop-portal, see above."),
+    };
+    match desktop::current().0 {
+        desktop if desktop.has_teleporter() => {}
+        Desktop::Kde => return without("on KDE Plasma it is not used yet."),
+        _ => return without("it is used on GNOME only so far."),
+    }
+    match device_types(bus).await {
+        Ok(types) if types & DEVICE_TYPE_POINTER != 0 => Check::pass(name),
+        Ok(types) => without(&format!(
+            "the RemoteDesktop portal of this desktop offers no pointer (its device types \
+             are {types}, without the 2 for the pointer)."
+        )),
+        Err(err) => {
+            log::debug!("{REMOTE_DESKTOP_INTERFACE} does not answer: {err}");
+            without("the portal has no RemoteDesktop interface.")
+        }
+    }
+}
+
+async fn device_types(bus: &zbus::Connection) -> zbus::Result<u32> {
+    portal_property(bus, REMOTE_DESKTOP_INTERFACE, "AvailableDeviceTypes").await
 }
 
 fn gst_element(factory: &str, hint: &str) -> Check {

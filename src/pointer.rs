@@ -1,21 +1,21 @@
 //! The pointer that a RemoteDesktop session grants: the desktop's own cursor,
-//! moved on the app's word. Part of the experiment in `src/input.rs`. Knows
+//! put where the app says. It is what the teleporter in `src/input.rs` moves.
+//! Positions are all it sends: no buttons, no scrolling, no keyboard. Knows
 //! nothing about GTK.
 //!
 //! There are two ways to move it, and a session has to settle on one.
 //!
-//! - The portal's own calls, `NotifyPointerMotionAbsolute` and its kin.
-//!   xdg-desktop-portal lets a position through only if it lies inside the
-//!   size it was given for the stream when the session started. GNOME gives
-//!   none for a virtual monitor, so there every position is refused.
 //! - libei, over the socket that `ConnectToEIS` hands out. The desktop offers
 //!   devices on it, and an absolute pointer comes with regions: the areas it
 //!   can reach, each with the mapping id of the stream that shows it. A
 //!   position is sent as a spot in the region of this session's stream.
+//! - The portal's own call, `NotifyPointerMotionAbsolute`. xdg-desktop-portal
+//!   lets a position through only if it lies inside the size it was given
+//!   for the stream when the session started. GNOME gives none for a virtual
+//!   monitor, so there every position is refused.
 //!
 //! libei is taken where the portal gave no size but did give a mapping id,
-//! which is GNOME. `MEESEEKS_INPUT_VIA=eis` or `=portal` asks for one of them
-//! outright.
+//! which is GNOME. The portal's call is what is left where it did not.
 
 use std::cell::RefCell;
 use std::fmt;
@@ -24,20 +24,14 @@ use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::rc::Rc;
 
-use ashpd::desktop::remote_desktop::{Axis, KeyState, NotifyPointerAxisOptions, RemoteDesktop};
+use ashpd::desktop::remote_desktop::RemoteDesktop;
 use reis::PendingRequestResult;
 use reis::ei;
 use reis::event::{Device, DeviceCapability, EiEvent, EiEventConverter, Region};
 use reis::handshake::EiHandshaker;
 
-/// The variable that asks for one of the two ways outright.
-const VARIABLE: &str = "MEESEEKS_INPUT_VIA";
-
 /// What the desktop is told this client is called.
 const NAME: &str = "meeseeks";
-
-/// What a wheel click is on libei's scale.
-const WHEEL_CLICK: i32 = 120;
 
 /// What the portal said of the session's stream when it started.
 pub struct Monitor {
@@ -67,22 +61,7 @@ impl Pointer {
         session: Rc<ashpd::desktop::Session<RemoteDesktop>>,
         monitor: Monitor,
     ) -> Self {
-        let asked = std::env::var(VARIABLE).ok();
-        let ei = match asked.as_deref().map(str::trim) {
-            Some("eis") => true,
-            Some("portal") => false,
-            Some("") | None => monitor.size.is_none() && monitor.mapping_id.is_some(),
-            Some(other) => {
-                log::warn!("{VARIABLE}: `{other}` is neither `eis` nor `portal`; ignoring it");
-                monitor.size.is_none() && monitor.mapping_id.is_some()
-            }
-        };
-        if ei && monitor.mapping_id.is_none() {
-            log::warn!(
-                "the portal gave no mapping id for the stream, so no libei region can be told \
-                 to be the monitor; the pointer will not move"
-            );
-        }
+        let ei = monitor.size.is_none() && monitor.mapping_id.is_some();
         if ei {
             // Once this call has been made the portal takes none of its own
             // any more, so there is no going back from here.
@@ -141,30 +120,6 @@ impl Pointer {
         match &self.via {
             Via::Portal(portal) => portal.move_to(along.0 * frame.0, along.1 * frame.1).await,
             Via::Ei(ei) => ei.move_to(along),
-        }
-    }
-
-    /// Presses or releases a button, named by its Linux evdev code.
-    pub async fn button(&self, code: i32, pressed: bool) -> Result<(), Error> {
-        match &self.via {
-            Via::Portal(portal) => portal.button(code, pressed).await,
-            Via::Ei(ei) => ei.button(code, pressed),
-        }
-    }
-
-    /// Scrolls smoothly, the way a touchpad does. `finish` ends the gesture.
-    pub async fn scroll(&self, dx: f64, dy: f64, finish: bool) -> Result<(), Error> {
-        match &self.via {
-            Via::Portal(portal) => portal.scroll(dx, dy, finish).await,
-            Via::Ei(ei) => ei.scroll(dx, dy, finish),
-        }
-    }
-
-    /// Scrolls by whole clicks of a wheel, to the right and down if positive.
-    pub async fn scroll_steps(&self, horizontal: i32, vertical: i32) -> Result<(), Error> {
-        match &self.via {
-            Via::Portal(portal) => portal.scroll_steps(horizontal, vertical).await,
-            Via::Ei(ei) => ei.scroll_steps(horizontal, vertical),
         }
     }
 
@@ -237,38 +192,6 @@ impl Portal {
             )
             .await
             .map_err(Error::Portal)
-    }
-
-    async fn button(&self, code: i32, pressed: bool) -> Result<(), Error> {
-        let state = if pressed {
-            KeyState::Pressed
-        } else {
-            KeyState::Released
-        };
-        self.proxy
-            .notify_pointer_button(&self.session, code, state, Default::default())
-            .await
-            .map_err(Error::Portal)
-    }
-
-    async fn scroll(&self, dx: f64, dy: f64, finish: bool) -> Result<(), Error> {
-        let options = NotifyPointerAxisOptions::default().set_finish(finish);
-        self.proxy
-            .notify_pointer_axis(&self.session, dx, dy, options)
-            .await
-            .map_err(Error::Portal)
-    }
-
-    async fn scroll_steps(&self, horizontal: i32, vertical: i32) -> Result<(), Error> {
-        for (axis, steps) in [(Axis::Horizontal, horizontal), (Axis::Vertical, vertical)] {
-            if steps != 0 {
-                self.proxy
-                    .notify_pointer_axis_discrete(&self.session, axis, steps, Default::default())
-                    .await
-                    .map_err(Error::Portal)?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -396,53 +319,6 @@ impl Ei {
         )
     }
 
-    fn button(&self, code: i32, pressed: bool) -> Result<(), Error> {
-        let Ok(code) = u32::try_from(code) else {
-            return Ok(());
-        };
-        let state = if pressed {
-            ei::button::ButtonState::Press
-        } else {
-            ei::button::ButtonState::Released
-        };
-        self.send(
-            |device| device.has_capability(DeviceCapability::Button),
-            |device| {
-                if let Some(button) = device.interface::<ei::Button>() {
-                    button.button(code, state);
-                }
-            },
-        )
-    }
-
-    fn scroll(&self, dx: f64, dy: f64, finish: bool) -> Result<(), Error> {
-        self.send(
-            |device| device.has_capability(DeviceCapability::Scroll),
-            |device| {
-                let Some(scroll) = device.interface::<ei::Scroll>() else {
-                    return;
-                };
-                if finish {
-                    // Both ways at once; neither is cancelled.
-                    scroll.scroll_stop(1, 1, 0);
-                } else {
-                    scroll.scroll(dx as f32, dy as f32);
-                }
-            },
-        )
-    }
-
-    fn scroll_steps(&self, horizontal: i32, vertical: i32) -> Result<(), Error> {
-        self.send(
-            |device| device.has_capability(DeviceCapability::Scroll),
-            |device| {
-                if let Some(scroll) = device.interface::<ei::Scroll>() {
-                    scroll.scroll_discrete(horizontal * WHEEL_CLICK, vertical * WHEEL_CLICK);
-                }
-            },
-        )
-    }
-
     /// Has `events` send what it has to on a device that `fits` and that the
     /// desktop takes events from, and closes the frame they make up.
     fn send(
@@ -483,12 +359,11 @@ impl State {
     fn take_in(&mut self, event: EiEvent, mapping_id: Option<&str>) -> bool {
         match event {
             EiEvent::SeatAdded(added) => {
-                // No relative pointer and no keyboard: they are not used.
-                added.seat.bind_capabilities(
-                    DeviceCapability::PointerAbsolute
-                        | DeviceCapability::Button
-                        | DeviceCapability::Scroll,
-                );
+                // Positions are all this sends: no relative pointer, no
+                // buttons, no scrolling and no keyboard are asked for.
+                added
+                    .seat
+                    .bind_capabilities(DeviceCapability::PointerAbsolute.into());
             }
             EiEvent::DeviceAdded(added) => {
                 let device = added.device;

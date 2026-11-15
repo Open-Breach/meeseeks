@@ -5,6 +5,7 @@
 
 mod checks;
 mod checks_dialog;
+mod desktop;
 mod display;
 mod environment;
 mod input;
@@ -49,7 +50,8 @@ const AWAY_REASON: &str =
 struct Running {
     session: Session,
     display: Display,
-    /// The input experiment at work on the picture, if it is switched on.
+    /// The teleporter at work on the picture, where the session came with a
+    /// pointer.
     input: Option<Input>,
 }
 
@@ -80,8 +82,6 @@ struct Shell {
     engaged: Cell<bool>,
     /// Tells when the window is on its own virtual monitor.
     mirror: Mirror,
-    /// The variant of the input experiment, if `MEESEEKS_INPUT` asks for one.
-    input: Option<input::Variant>,
     /// The monitor the selector was last told about, and the watch on its
     /// size and scale.
     screen: RefCell<Option<(gdk::Monitor, [glib::SignalHandlerId; 2])>>,
@@ -124,14 +124,7 @@ impl Shell {
     }
 
     async fn open(self: &Rc<Self>, size: (i32, i32)) -> Result<Running, Box<dyn Error>> {
-        let (session, stream, pointer) = match self.input {
-            None => {
-                let (session, stream) = Session::start().await?;
-                (session, stream, None)
-            }
-            // The experiment needs a session that comes with the pointer.
-            Some(_) => Session::start_with_pointer().await?,
-        };
+        let (session, stream, pointer) = Session::start().await?;
 
         // The pipeline calls this from its own bus handler; stop from a fresh
         // main loop turn rather than tearing the pipeline down under it.
@@ -146,10 +139,7 @@ impl Shell {
 
         match Display::new(stream.fd, stream.node_id, size, on_end) {
             Ok(display) => {
-                let input = self
-                    .input
-                    .zip(pointer)
-                    .map(|(variant, pointer)| Input::attach(&self.picture, variant, pointer));
+                let input = pointer.map(|pointer| Input::attach(&self.picture, pointer));
                 Ok(Running {
                     session,
                     display,
@@ -466,7 +456,6 @@ fn build_window(
         stage_size: Cell::new((0, 0)),
         engaged: Cell::new(false),
         mirror: Mirror::default(),
-        input: input::Variant::from_env(),
         screen: RefCell::new(None),
         running: RefCell::new(None),
     });
