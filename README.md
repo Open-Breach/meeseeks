@@ -34,6 +34,8 @@ The window opens with a choice of sizes for the virtual monitor: presets, or a w
 
 A left click on the picture sends the mouse pointer to that spot of the virtual monitor, so there is no edge to find. The desktop has to allow that: on GNOME, switch **Allow Remote Interaction** on in the dialog at Start. It is off as it comes, and without it the monitor works all the same. The click only places the pointer and is not passed on; from there the mouse works on the virtual monitor as on any other and leaves it over its edge. Nothing is typed or clicked for you. On KDE Plasma the click does nothing yet.
 
+While the monitor runs, the camera button next to **Stop** saves what is on it as a PNG file, at the monitor's own size whatever size the window is, in the folder `Meeseeks` of your Pictures folder.
+
 Once the monitor has started the window cannot be resized, so that the picture stays unscaled. **Options** in the title bar can lift that lock; resizing then scales the picture and leaves the monitor as it is. The options also have the renderer GTK draws with (GL by default, Vulkan, or Cairo in software) and two experimental switches for how frames are taken. Saving them closes the app and starts it again, because they only take effect at startup.
 
 If the window is moved onto its own virtual monitor it would show itself, over and over. It then shows a request to move it back to a physical screen instead, and the picture returns once it is back.

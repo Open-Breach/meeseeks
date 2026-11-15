@@ -276,7 +276,7 @@ Borders are 1 px and solid: `card-border` around cards, `row-line` between rows,
 
 Stop has no radius of its own: it keeps the desktop theme's button corners.
 
-The pictograms are drawn with cairo in `src/pictograms.rs`, not taken from the icon theme, so they look the same on every desktop: 20 px marks (a white tick on a green disc, a white cross on a red disc, an amber triangle with a dark exclamation mark) with round-ended strokes of 1.6 to 1.8 px, and one 64 px line drawing in `dim` with 3 px strokes (a screen with an arrow leaving it). Each has an accessible name.
+The pictograms are drawn with cairo in `src/pictograms.rs`, not taken from the icon theme, so they look the same on every desktop: 20 px marks (a white tick on a green disc, a white cross on a red disc, an amber triangle with a dark exclamation mark) with round-ended strokes of 1.6 to 1.8 px, one 64 px line drawing in `dim` with 3 px strokes (a screen with an arrow leaving it), and a 20 px camera in 1.6 px strokes. The camera is the one pictogram without a colour of its own: it sits in the title bar, which may be light or dark, and is drawn in the colour its button has for text. Each has an accessible name.
 
 ## Components
 
@@ -327,6 +327,11 @@ In the desktop's header bar, at the start, shown only while running (`.mk-stop`)
 - **Style:** `destructive`, white text at weight 600, padding 5 px 12 px, no border; a 10 px white square with 2 px corners (`.mk-stop-square`), 8 px, then the word "Stop".
 - **States:** `destructive-hover`, `destructive-active`; focus is a 2 px `destructive` outline, 2 px off.
 
+### Screenshot button
+In the desktop's header bar, after Stop, shown only while running. Built in `src/screenshot.rs`.
+- **Style:** a plain button of the desktop theme's, like Options, with nothing of the app's style sheet on it. Its face is the 20 px camera pictogram. Tooltip and accessible name: "Save a screenshot".
+- **States:** insensitive until the first frame has arrived. After a save the face is the "passed" tick for 1.5 s, then the camera again; after a save that failed it is the warning sign for the same time. Nothing else moves and nothing pops up. Hover, pressed and focus are the theme's.
+
 ### Restart question
 GTK's own alert (`GtkAlertDialog`), kept because it brings the desktop's behaviour with it (Escape, Return, the screen reader's alert role). The style sheet reaches it through `window.dialog.message`: white ground, white buttons with `control-hover` and `control-active`, the default answer in `accent` at weight 600, a 2 px `accent` focus outline set 2 px inside. Its layout is GTK's.
 
@@ -345,7 +350,7 @@ Shown in place of the picture when the window sits on its own virtual monitor: o
 - **Do** keep the Start button's press target still and move only the cap inside it.
 
 ### Don't:
-- **Don't** style the title bars or the theme's own widgets beyond what is listed here; the header bar, the Options button and the drop-down's pop-up are the desktop's.
+- **Don't** style the title bars or the theme's own widgets beyond what is listed here; the header bar, the Options button, the screenshot button and the drop-down's pop-up are the desktop's.
 - **Don't** give a second object depth: no gloss, collar, side wall or large cast shadow on anything but Start.
 - **Don't** use red for anything but Stop and failures, or blue for anything but what is chosen, what goes ahead, and focus.
 - **Don't** ship or name a font, and don't set sizes in pixels or points.
