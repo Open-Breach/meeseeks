@@ -52,8 +52,8 @@ This spec lifts the "No CI, no packaging" rule in `CLAUDE.md` for exactly what i
 
 ### Runtime requirements on the user's machine (from the system, not bundled)
 
-- Wayland session on GNOME (Mutter) or KDE Plasma (KWin).
-- xdg-desktop-portal with the GNOME or KDE backend: ScreenCast with the virtual source type; RemoteDesktop for teleporter mode.
+- Wayland session on GNOME (Mutter) or KDE Plasma 6.5 or later (KWin).
+- xdg-desktop-portal with the GNOME or KDE backend: ScreenCast with the virtual source type, which Plasma has from 6.5; RemoteDesktop for teleporter mode, which Plasma is asked for from 6.6.
 - PipeWire with the GStreamer PipeWire plugin (`pipewiresrc`).
 - GTK 4.14 or newer; GStreamer 1.24 or newer, core and base with its GL library; a glibc at least as new as the build image's, which is 2.39.
 - The startup checks cover all of these except the library floor in the last line: on an older GTK or glibc the binary does not load at all, so no dialog can say so. The README has to.
