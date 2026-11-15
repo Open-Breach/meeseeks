@@ -6,7 +6,9 @@ APP=${APP:-$T/../target/debug/meeseeks}
 PYTHON=${PYTHON:-python3}
 SETTINGS=$XDG_CONFIG_HOME/meeseeks/settings.toml
 # A gtk4paintablesink built by hand, where the distribution packages none.
-[ -d "$T/build/plugins" ] && export GST_PLUGIN_PATH=$T/build/plugins
+if ! gst-inspect-1.0 gtk4paintablesink > /dev/null 2>&1 && [ -d "$T/build/plugins" ]; then
+  export GST_PLUGIN_PATH=$T/build/plugins
+fi
 
 if [ ! -x "$APP" ]; then
   echo "missing $APP; run cargo build first" >&2
@@ -21,9 +23,10 @@ write_settings() {
 
 # Gives the desktop a keyboard, a mouse and a camera, see hands.py; its log
 # goes to out/<name>-hands.log. `hand` then does with them what its arguments
-# say: move <x> <y> on the screen, press or release <evdev code>, wheel
-# <clicks>, key <name>[+<name>...]. It has to be there before the app, which
-# would otherwise find a seat with no devices.
+# say: move <x> <y> on the screen, nudge <dx> <dy> from where the pointer is,
+# press or release <evdev code>, wheel <clicks>, key <name>[+<name>...]. It
+# has to be there before the app, which would otherwise find a seat with no
+# devices.
 start_hands() {
   mkfifo "$XDG_RUNTIME_DIR/hands"
   "$PYTHON" "$T/gnome/hands.py" < "$XDG_RUNTIME_DIR/hands" > "$OUT/$1-hands.log" 2>&1 &

@@ -6,6 +6,8 @@ watch its monitors. This holds such a session for as long as it runs and does
 what the lines on its standard input say:
 
   move <x> <y>        the pointer to that spot of the monitor
+  nudge <dx> <dy>     the pointer that far from where it is, as a real mouse
+                      moves it; this is the way onto another monitor
   press <button>      by evdev code; 272 is the left button
   release <button>
   wheel <clicks>      the wheel, down if positive
@@ -69,6 +71,8 @@ class Hands:
         match words:
             case ["move", x, y]:
                 self.session.NotifyPointerMotionAbsolute(self.stream, float(x), float(y))
+            case ["nudge", dx, dy]:
+                self.session.NotifyPointerMotionRelative(float(dx), float(dy))
             case ["press" | "release" as action, button]:
                 self.session.NotifyPointerButton(int(button), action == "press")
             case ["wheel", clicks]:

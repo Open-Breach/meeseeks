@@ -1,7 +1,7 @@
 #!/bin/bash
 # The input experiment, MEESEEKS_INPUT, on a real Mutter with the real portal:
 # where the desktop's cursor ends up when the pointer comes onto the picture.
-# Usage: input.sh <teleport|forward> [eis|portal|denied] [locked|unlocked]
+# Usage: input.sh <teleport|click|forward> [eis|portal|denied] [locked|unlocked]
 #
 # eis     The dialog is answered with Allow Remote Interaction switched on,
 #         and the app is left to choose how to move the pointer. GNOME gives
@@ -17,9 +17,11 @@
 # pixels.
 #
 # The mouse here is told where to be on the screen. A real one says how far
-# it moved, and would not come back from the monitor between the steps.
+# it moved, and would not come back from the monitor between the steps. The
+# step called the way out moves it as a real one moves, with the desktop not
+# scaled.
 . "$T/gnome/lib.sh"
-usage="usage: input.sh <teleport|forward> [eis|portal|denied] [locked|unlocked]"
+usage="usage: input.sh <teleport|click|forward> [eis|portal|denied] [locked|unlocked]"
 variant=${1:?$usage}
 way=${2:-eis}
 lock=${3:-locked}
@@ -60,18 +62,25 @@ app_seen=0; landing_seen=0
 said() {
   sleep 1
   tail -n +$((app_seen + 1)) "$OUT/$name-app.log" \
-    | grep -e "teleport:" -e "forward:" -e "WARN" -e "not passed on" \
+    | grep -e "teleport:" -e "click:" -e "forward:" -e "WARN" -e "not passed on" \
     | sed -e 's/^[^ ]* //' -e 's/\. From the window.*Passed on to the desktop:/; passed on:/' -e 's/^/    app: /' | cut -c1-330
   tail -n +$((landing_seen + 1)) "$OUT/$name-landing.log" | grep -v "on Meta" | sed 's/^\[landing\]/    monitor:/'
   app_seen=$(wc -l < "$OUT/$name-app.log"); landing_seen=$(wc -l < "$OUT/$name-landing.log")
 }
-# Where the pointer last came onto the picture, by the app's reckoning.
-arrived() { grep "has come onto the picture at" "$OUT/$name-app.log" | tail -1 | sed 's/.*picture at \([-0-9.]*\),\([-0-9.]*\):.*/\1 \2/'; }
+# Puts the pointer on a spot of the screen in the way that has the app send
+# it off: by moving it there, and with `click` by clicking there as well.
+go() {
+  hand move "$1" "$2"
+  if [ "$variant" = click ]; then hand press 272; hand release 272; fi
+}
+# Where the last stay of the pointer began on the picture, by the app's
+# reckoning.
+arrived() { grep -e "came onto the picture at .*: frames" -e "was clicked at .*: frames" "$OUT/$name-app.log" | tail -1 | sed 's/.* at \([-0-9.]*\),\([-0-9.]*\): frames.*/\1 \2/'; }
 # Finds out where the picture is on the screen, and how many of the screen's
 # units one of the picture's is, from two spots the pointer is put on.
 find_picture() {
-  hand move 20 20; hand move "$1" "$2"; hand move 20 20; read -r ax ay < <(arrived)
-  hand move 20 20; hand move "$3" "$4"; hand move 20 20; read -r bx by < <(arrived)
+  hand move 20 20; go "$1" "$2"; hand move 20 20; read -r ax ay < <(arrived)
+  hand move 20 20; go "$3" "$4"; hand move 20 20; read -r bx by < <(arrived)
   read -r px py kx ky < <("$PYTHON" -c "
 import sys
 hx1, hy1, hx2, hy2, ax, ay, bx, by = map(float, sys.argv[1:])
@@ -79,10 +88,13 @@ kx, ky = (hx2 - hx1) / (bx - ax), (hy2 - hy1) / (by - ay)
 print(hx1 - ax * kx, hy1 - ay * ky, kx, ky)" "$1" "$2" "$3" "$4" "$ax" "$ay" "$bx" "$by")
   echo "   the picture begins at $px,$py of the screen; one of its units is $kx by $ky of the screen's"
 }
-# Brings the pointer onto a spot of the picture, from off the window.
+# Where on the screen a spot of the picture is.
+screen() { "$PYTHON" -c "import sys; px, py, kx, ky, x, y = map(float, sys.argv[1:]); print(px + x * kx, py + y * ky)" "$px" "$py" "$kx" "$ky" "$1" "$2"; }
+# Brings the pointer onto a spot of the picture, from off the window, in the
+# way that has the app send it off.
 onto() {
   hand move 20 20
-  hand move $("$PYTHON" -c "import sys; px, py, kx, ky, x, y = map(float, sys.argv[1:]); print(px + x * kx, py + y * ky)" "$px" "$py" "$kx" "$ky" "$1" "$2")
+  go $(screen "$1" "$2")
 }
 
 if [ "$way" = denied ]; then
@@ -91,6 +103,10 @@ if [ "$way" = denied ]; then
 else
   echo "== finding the picture on the screen"
   find_picture 700 450 900 550; said > /dev/null
+  if [ "$variant" = click ]; then
+    echo "== over the picture at 640,360 and across it, without a click: nothing"
+    hand move 20 20; hand move $(screen 640 360); hand move $(screen 700 400); hand move 20 20; said
+  fi
   echo "== onto the picture at 320,180"
   onto 320 180; said
   echo "== a click and two clicks of the wheel, wherever the cursor now is"
@@ -100,6 +116,18 @@ else
   echo "== onto the picture at 1279,719, its last pixel"
   onto 1279 719; said
   hand move 20 20; said > /dev/null
+
+  if [ "${SCALE:-0}" = 0 ]; then
+    # The virtual monitor lies to the right of the screen, their tops level,
+    # so a pointer that leaves it to the left at the height of the picture's
+    # middle is 300 further on over the picture.
+    my=$("$PYTHON" -c "print(round($py + 360 * $ky))")
+    echo "== onto the picture at 300,$my, then the way out as a real mouse goes it: 400 to the left, over the monitor's left edge onto the screen"
+    onto 300 "$my"; hand nudge -400 0; said
+    echo "== 300 further to the left, across the picture: teleport sends the pointer to the monitor again, click does not"
+    hand nudge -300 0; said
+    hand move 20 20; said > /dev/null
+  fi
 
   if [ "$lock" = unlocked ]; then
     echo "== the window tiled to the left half of the screen: the picture is scaled, with bands above and below"
