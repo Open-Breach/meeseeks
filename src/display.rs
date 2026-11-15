@@ -9,8 +9,9 @@ use std::time::Instant;
 
 use gst::glib;
 use gst::prelude::*;
-use gtk::gdk;
-use gtk::gdk::prelude::PaintableExt;
+use gtk::gdk::prelude::{PaintableExt, TextureExt, TextureExtManual};
+use gtk::prelude::{GskRendererExt, SnapshotExt};
+use gtk::{gdk, graphene, gsk};
 
 /// How often the frame rates go to the debug log, in seconds.
 const FRAME_LOG_INTERVAL: u32 = 5;
@@ -184,6 +185,62 @@ impl Display {
     pub fn paintable(&self) -> &gdk::Paintable {
         &self.paintable
     }
+
+    /// The frame the stream brought last, at the monitor's own size whatever
+    /// size the picture is shown at, or `None` before the first has arrived.
+    /// Its bytes are in main memory, so it can be worked on from any thread.
+    /// Must be called on the GTK main thread.
+    ///
+    /// The frame is drawn once more, by `renderer`, into a texture of its
+    /// own, instead of being read out of the pipeline. GTK draws either kind
+    /// of frame the stream may bring: one in shared memory is its own bytes
+    /// and a DMA-BUF stays the compositor's, which only a renderer knows how
+    /// to read. Drawn by the renderer of the window that shows the picture,
+    /// the colours come out as they do there.
+    pub fn frame(&self, renderer: &gsk::Renderer) -> Option<gdk::Texture> {
+        let (width, height) = (
+            self.paintable.intrinsic_width(),
+            self.paintable.intrinsic_height(),
+        );
+        if width <= 0 || height <= 0 {
+            return None;
+        }
+        let snapshot = gtk::Snapshot::new();
+        self.paintable
+            .snapshot(&snapshot, f64::from(width), f64::from(height));
+        let node = snapshot.to_node()?;
+        let area = graphene::Rect::new(0.0, 0.0, width as f32, height as f32);
+        Some(in_memory(renderer.render_texture(&node, Some(&area))))
+    }
+}
+
+/// The format `gdk::Texture::download` writes: cairo's ARGB32, which is these
+/// bytes in this order.
+#[cfg(target_endian = "little")]
+const DOWNLOADED: gdk::MemoryFormat = gdk::MemoryFormat::B8g8r8a8Premultiplied;
+#[cfg(target_endian = "big")]
+const DOWNLOADED: gdk::MemoryFormat = gdk::MemoryFormat::A8r8g8b8Premultiplied;
+
+/// The same picture with its bytes in main memory. What a GL renderer hands
+/// back is still on the graphics card, and reading that out takes GTK's GL
+/// context, which is the main thread's: from another thread the read fails
+/// and takes the app down with it. So it is read here.
+fn in_memory(texture: gdk::Texture) -> gdk::Texture {
+    if texture.is::<gdk::MemoryTexture>() {
+        return texture;
+    }
+    let (width, height) = (texture.width(), texture.height());
+    let stride = width as usize * 4;
+    let mut bytes = vec![0; stride * height as usize];
+    texture.download(&mut bytes, stride);
+    gdk::MemoryTexture::new(
+        width,
+        height,
+        DOWNLOADED,
+        &glib::Bytes::from_owned(bytes),
+        stride,
+    )
+    .upcast()
 }
 
 impl Drop for Display {

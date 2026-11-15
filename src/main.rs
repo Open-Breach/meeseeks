@@ -14,6 +14,7 @@ mod options;
 mod pictograms;
 mod pointer;
 mod renderer;
+mod screenshot;
 mod selector;
 mod session;
 mod settings;
@@ -22,14 +23,16 @@ mod style;
 use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::rc::Rc;
+use std::time::Instant;
 
 use gtk::prelude::*;
-use gtk::{gdk, glib};
+use gtk::{gdk, gio, glib};
 
 use display::Display;
 use environment::Environment;
 use input::Input;
 use mirror::Mirror;
+use screenshot::Shot;
 use selector::Selector;
 use session::Session;
 use settings::{MIN_SIDE, Settings};
@@ -68,6 +71,9 @@ struct Shell {
     selector: Rc<Selector>,
     picture: gtk::Picture,
     stop: gtk::Button,
+    /// Saves what the virtual monitor shows as a picture. In the title bar
+    /// next to Stop, and like it only while a monitor runs.
+    screenshot: Rc<screenshot::Button>,
     settings: RefCell<Settings>,
     /// Which settings the environment stands in for, for the options to say.
     overridden: options::Overridden,
@@ -106,10 +112,12 @@ impl Shell {
                     shell
                         .picture
                         .set_paintable(Some(running.display.paintable()));
+                    shell.await_frame(running.display.paintable());
                     shell.running.replace(Some(running));
                     shell.show_page();
                     shell.selector.set_busy(false);
                     shell.stop.set_visible(true);
+                    shell.screenshot.widget().set_visible(true);
                     shell.stop.grab_focus();
                 }
                 Err(err) => {
@@ -172,6 +180,8 @@ impl Shell {
             input.detach();
         }
         self.stop.set_visible(false);
+        self.screenshot.widget().set_visible(false);
+        self.screenshot.reset();
         self.selector.set_busy(true);
         self.picture.set_paintable(gdk::Paintable::NONE);
         drop(display);
@@ -191,6 +201,73 @@ impl Shell {
             shell.selector.set_busy(false);
             shell.selector.focus_start();
             drop(hold);
+        });
+    }
+
+    /// There is nothing to take a screenshot of until the first frame has
+    /// arrived, which is when the picture gets its size. The button cannot
+    /// be pressed until then.
+    fn await_frame(self: &Rc<Self>, paintable: &gdk::Paintable) {
+        let button = self.screenshot.widget();
+        button.set_sensitive(paintable.intrinsic_width() > 0);
+        // The handler goes with the paintable, which is the pipeline's.
+        let button = button.downgrade();
+        paintable.connect_invalidate_size(move |paintable| {
+            if let Some(button) = button.upgrade()
+                && paintable.intrinsic_width() > 0
+            {
+                button.set_sensitive(true);
+            }
+        });
+    }
+
+    /// Saves the frame the virtual monitor shows right now as a picture, and
+    /// has the button say how that went. The frame is the stream's, so it is
+    /// the monitor at its own size whatever the window shows of it.
+    fn shoot(self: &Rc<Self>) {
+        let since = Instant::now();
+        let frame = {
+            let running = self.running.borrow();
+            let Some(running) = running.as_ref() else {
+                return;
+            };
+            self.window
+                .renderer()
+                .and_then(|renderer| running.display.frame(&renderer))
+        };
+        let Some(frame) = frame else {
+            log::warn!("no screenshot: there is no frame to save yet");
+            self.screenshot.show(false);
+            return;
+        };
+        let (width, height) = (frame.width(), frame.height());
+        let drawn = since.elapsed();
+        let shot = Shot::new(frame);
+        let shell = self.clone();
+        glib::spawn_future_local(async move {
+            // Off the main thread: a large frame takes a moment to pack,
+            // which the picture is not to wait for.
+            let saved = match gio::spawn_blocking(move || shot.save()).await {
+                Ok(Ok(path)) => {
+                    log::info!("screenshot saved: {}", path.display());
+                    true
+                }
+                Ok(Err(err)) => {
+                    log::warn!("the screenshot could not be saved: {err}");
+                    false
+                }
+                Err(_) => {
+                    log::warn!("the screenshot could not be saved: writing it was given up");
+                    false
+                }
+            };
+            log::debug!(
+                "screenshot: a frame of {width}×{height}, drawn in {:.1} ms on the main thread, \
+                 done {:.0} ms after the click",
+                drawn.as_secs_f64() * 1000.0,
+                since.elapsed().as_secs_f64() * 1000.0
+            );
+            shell.screenshot.show(saved);
         });
     }
 
@@ -437,8 +514,10 @@ fn build_window(
         .visible(false)
         .build();
     let options = gtk::Button::with_mnemonic("_Options");
+    let screenshot = screenshot::Button::new();
     let header = gtk::HeaderBar::new();
     header.pack_start(&stop);
+    header.pack_start(screenshot.widget());
     header.pack_end(&options);
 
     let window = gtk::ApplicationWindow::builder()
@@ -457,6 +536,7 @@ fn build_window(
         selector,
         picture,
         stop,
+        screenshot,
         settings: RefCell::new(settings),
         overridden,
         restart,
@@ -489,6 +569,13 @@ fn build_window(
     shell.stop.connect_clicked(move |_| {
         if let Some(shell) = weak.upgrade() {
             shell.stop();
+        }
+    });
+
+    let weak = Rc::downgrade(&shell);
+    shell.screenshot.widget().connect_clicked(move |_| {
+        if let Some(shell) = weak.upgrade() {
+            shell.shoot();
         }
     });
 
