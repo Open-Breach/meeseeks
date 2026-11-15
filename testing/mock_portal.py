@@ -16,7 +16,8 @@ MOCK_BAD_FD=1 hands out a socket nobody answers on instead of the PipeWire
 remote; MOCK_BAD_FD=devnull hands out /dev/null.
 MOCK_STREAM_SIZE=<width>x<height> has Start give that size for the stream,
 as KDE's portal does; the default is to give none, as GNOME's does for a
-virtual monitor.
+virtual monitor. There is no ConnectToEIS and Start gives no mapping id, so
+the app never takes this for a portal to speak libei with.
 
 For RemoteDesktop sessions:
 MOCK_DEVICES=<bits> is what Start grants of the devices asked for; the default

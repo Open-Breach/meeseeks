@@ -1,7 +1,7 @@
 # Test setups
 
-Two ways to run the unmodified app where there is no GNOME or KDE session, such
-as a container. Both put stand-ins around it:
+Three ways to run the unmodified app where there is no GNOME or KDE session,
+such as a container. The first two put stand-ins around it:
 
 - a mock of `org.freedesktop.portal.ScreenCast` and of the pointer calls of
   `org.freedesktop.portal.RemoteDesktop` (`mock_portal.py`) that prints what
@@ -14,6 +14,9 @@ frames are shared memory and GTK draws with Cairo; the real portal, Mutter,
 KWin and the DMA-BUF path are not exercised. The tests print what happened and
 leave logs and screenshots in `out/`. Nothing passes or fails by itself: read
 the output.
+
+The third, further down, has no stand-ins: a real Mutter and the real portal,
+headless.
 
 Nothing of the machine's own session is used. Each run makes its own runtime
 directory under `/tmp` and removes it again.
@@ -43,7 +46,7 @@ takes everything down again.
 | `tests/resize.sh [locked\|unlocked]` | Resizing before Start, with sway resizing the window on request. The fields follow the window (`out/resize-*-idle.png`), a size too large brings the warning (`out/resize-*-too-large.png`), and Start takes the size the window has: look for the producer's `negotiated size: 1100x750` and the picture's white edge in the corner pixels. While it runs the lock decides, read off the picture as in `window-size.sh`. After Stop the window is back at the size it started with and can be resized again |
 | `tests/away.sh` | The window on its own virtual monitor. The mock portal makes no monitor, so a sway output created after Start stands in for it. On an output that was there before Start the picture stays; on the new one, and across its edge, the message takes its place (`out/away-on-3.png`, `out/away-half-on-3.png`); back on the first output the picture returns. The log says when the stream stops being drawn and when it is drawn again |
 | `tests/window-size.sh 2560x1440 [locked\|unlocked]` | The area under the title bar is exactly 1920×1080 and the picture is drawn pixel for pixel. Of the eight pixels it reads, the first two are the picture's white edge, the next two its gradient, the next two the white edge again, and the last two lie just outside the picture. Then sway is asked to shrink the window: locked, the picture still runs on past the frame sway drew; unlocked, it is scaled into it |
-| `tests/input.sh <teleport\|forward> [stay\|warp\|echo\|nosize\|denied] [locked\|unlocked]` | The input experiment, `MEESEEKS_INPUT`, with a virtual pointer for a mouse. In the portal log, look for the RemoteDesktop conversation: `RemoteDesktop.SelectDevices {'types': 2}`, the same `SelectSources` as ever, one `RemoteDesktop.Start`. After each step the test prints what the portal was sent. `stay`: the mock only prints it, which no desktop does but shows all the app would pass on: one position for each time the pointer comes onto the picture with `teleport`; every position, button and scroll with `forward`. `warp`: the mock puts sway's cursor on a second output, as a desktop does with its one cursor, and either variant gets one position out before the pointer is gone. `echo`: the cursor stays and the mock has the mouse repeat every button and scroll it is sent, so the window gets each twice; `forward` must pass each on once (`not passed on` in the app log), not for ever. `nosize`: Start gives no size for the stream, as GNOME's portal does for a virtual monitor; every position is refused, and no button or scroll is passed on. `denied`: no pointer is granted and nothing is sent. `unlocked` goes on to a scaled window, with bands beside the picture and above it. The app log has one line for each stay of the pointer over the picture |
+| `tests/input.sh <teleport\|forward> [stay\|warp\|echo\|nosize\|denied] [locked\|unlocked]` | The input experiment, `MEESEEKS_INPUT`, with a virtual pointer for a mouse. In the portal log, look for the RemoteDesktop conversation: `RemoteDesktop.SelectDevices {'types': 2}`, the same `SelectSources` as ever, one `RemoteDesktop.Start`. After each step the test prints what the portal was sent. `stay`: the mock only prints it, which no desktop does but shows all the app would pass on: one position for each time the pointer comes onto the picture with `teleport`; every position, button and scroll with `forward`. `warp`: the mock puts sway's cursor on a second output, as a desktop does with its one cursor, and either variant gets one position out before the pointer is gone. `echo`: the cursor stays and the mock has the mouse repeat every button and scroll it is sent, so the window gets each twice; `forward` must pass each on once (`not passed on` in the app log), not for ever. `nosize`: Start gives no size for the stream, as GNOME's portal does for a virtual monitor; every position is refused, and no button or scroll is passed on. On GNOME itself the app moves the pointer over libei instead, which the mock does not have; see "On a headless GNOME". `denied`: no pointer is granted and nothing is sent. `unlocked` goes on to a scaled window, with bands beside the picture and above it. The app log has one line for each stay of the pointer over the picture |
 | `tests/options.sh` | The options dialog, worked with the keyboard. Cairo and both switches are saved, and the app starts again by itself: look for `GTK draws with GskCairoRenderer` and `trying: copy,srgb`. Reset to defaults, with a monitor running, closes its session and brings GL back, or Cairo with a warning where there is no GL. Then with Vulkan in the file: `GSK_RENDERER=cairo` and `MEESEEKS_TRY=srgb` in the environment win, and `out/options-overridden.png` shows the dialog saying so; without them Vulkan is asked for, and where it cannot be initialised the log says what GTK fell back to |
 | `tests/size-control.sh` | The control for that: a consumer that asks for no size gets 1280×720 from the same producer |
 | `tests/frame-rate.sh <ms or none> <seconds>` | Frame rates against a producer set up like Mutter's virtual monitor, which renegotiates the stream that many milliseconds after the start. Look for about 60 frames a second in the app's log and no ticks without a free buffer in the producer's |
@@ -98,6 +101,43 @@ ID`, a bare PipeWire client. `python3 clockwatch.py ID` prints how far
 These were last run with Ubuntu 26.10 in the root: PipeWire 1.6.8, GStreamer
 1.28.7, GTK 4.24.1.
 
+## On a headless GNOME
+
+Mutter can run without a screen and without a GPU. `gnome/env.sh` brings up a
+private one with one virtual monitor for a screen, and next to it the real
+xdg-desktop-portal with its GNOME backend. The app then talks to the portal a
+GNOME session has: the portal's own dialog comes up, and Mutter makes the
+virtual monitor.
+
+Needs, by their Ubuntu names, on top of the list above: `mutter
+xdg-desktop-portal xdg-desktop-portal-gnome gir1.2-gtk-4.0
+gstreamer1.0-plugins-base gstreamer1.0-plugins-good`. sway and the test
+producers are not used.
+
+```
+cargo build
+testing/gnome/env.sh testing/gnome/tests/loop.sh
+testing/gnome/env.sh testing/gnome/tests/input.sh teleport
+```
+
+Nobody sits at that desktop. `gnome/hands.py` works its keyboard and its
+pointer through Mutter's remote desktop interface, and takes the screenshots
+through its screen cast one. The portal's dialog is answered with the
+dialog's own mnemonics. `gnome/landing.py` is a window that fills the virtual
+monitor and prints where the pointer is on it.
+
+It is the distribution's GNOME, not a session somebody works in. There is no
+GPU, so frames are shared memory and GTK draws with Cairo. There is no
+gnome-shell. The mouse is told where to be rather than moved.
+
+| Test | What it shows |
+| --- | --- |
+| `gnome/tests/loop.sh` | Start, Stop, Start again, close the window while running, without the input experiment. The dialog is GNOME's "Share Screen" (`out/gnome-loop-dialog.png`). Look for `Added virtual monitor` and `Removed virtual monitor` in Mutter's log for each start, the `buffer path` line and exit status 0 |
+| `gnome/tests/input.sh <teleport\|forward> [eis\|portal\|denied] [locked\|unlocked]` | The input experiment. The dialog is GNOME's "Remote Desktop" (`out/gnome-input-*-dialog.png`), with Allow Remote Interaction off as it comes. After each step the test prints what the app says it sent and what the window on the virtual monitor got. `eis`: the app chooses libei; the monitor's window gets `enter` at the very spot of the picture the pointer came onto, then the click and the wheel that follow, since the cursor is now there. `portal`: the app is told to use the portal's own calls, and each position comes back as `Invalid position`. `denied`: the switch is left off and no pointer is granted. `unlocked` tiles the window, so that the picture is scaled and has bands. With `SCREEN=3200x2000 SCALE=2`, and with `LAYOUT=logical` on top, the desktop is scaled; the monitor's window then counts in units of two pixels, half of what the app says it sent |
+
+These were last run on Ubuntu 24.04 with Mutter 46.2, xdg-desktop-portal
+1.18.4 and xdg-desktop-portal-gnome 46.2.
+
 ## The test programs
 
 - `producers/picture-source.c`: a stream with a recognisable picture that
@@ -111,6 +151,7 @@ These were last run with Ubuntu 26.10 in the root: PipeWire 1.6.8, GStreamer
 - `pointer.py`: a mouse for the headless seat, which has none. It holds a
   virtual pointer and moves, clicks and scrolls as it is told on its standard
   input.
+- `gnome/hands.py` and `gnome/landing.py`: see "On a headless GNOME".
 
 ## Where the distribution has no `gtk4paintablesink`
 
