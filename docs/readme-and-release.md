@@ -4,6 +4,8 @@ Written 2026-11-14. Source of truth for how Meeseeks is built and released, and 
 
 Updated 2026-11-14: the teleporter is decided (click-to-enter, on by default, in the first release), and the screenshot button (`docs/screenshot.md`) is in the features list.
 
+Updated 2026-11-15, with Serge's answers on the release issue: the tarball has Rick's layout and Rick's name form, with a generated `THIRD-PARTY-LICENSES.md`; the runner comes from a repository variable; builds are cold; the workflow has three guards; the application id is `meeseeks`; there is one screenshot, light; the requirements list is held to the checks by a test; sections 8 and 9 of the README are Meeseeks's own wording; the first release is 0.9.0.
+
 This spec lifts the "No CI, no packaging" rule in `CLAUDE.md` for exactly what is described here: one release workflow and one tarball. That line is updated as part of the work. Flatpak stays under "Later" in `SPEC.md`.
 
 ## 1. Release workflow
@@ -14,31 +16,46 @@ This spec lifts the "No CI, no packaging" rule in `CLAUDE.md` for exactly what i
 
 ### Runner
 
-- GitHub Actions on a Depot runner: `runs-on: depot-ubuntu-24.04`. Ubuntu 24.04 is the floor because it ships GTK 4.14, which the DMA-BUF path of the GTK 4 sink needs at compile time. Older images are out.
-- Cargo registry and `target` are cached between runs, so a release build is not a cold build.
-- The Depot GitHub app must be enabled for this repository, or the job queues forever. Serge does that.
+- GitHub Actions, as Rick does it: `runs-on: ${{ vars.RUNNER_LINUX_X64 || 'ubuntu-24.04' }}`. The repository variable names the runner, a Depot one for instance; where it is not set, the job runs on GitHub's own `ubuntu-24.04`, so a release never queues for a runner that is not there.
+- It is an Ubuntu 24.04 image either way. Ubuntu 24.04 is the floor because it ships GTK 4.14, which the DMA-BUF path of the GTK 4 sink needs at compile time. Older images are out.
+- Every release build is a cold build. A tag's run cannot read the cache another tag's run saved, and nothing builds on `main` to save one there; that would be CI.
 
 ### Build
 
 - One job, Linux x86_64 only.
-- Build packages via `apt`: `libgtk-4-dev`, `libgstreamer1.0-dev`, `libgstreamer-plugins-base1.0-dev`, `libpipewire-0.3-dev`, and anything else the dev machine already needs for `cargo build`.
-- `gtk4paintablesink` is linked statically: add the `gst-plugin-gtk4` crate as a dependency and register it at startup (`gstgtk4::plugin_register_static()`) before the startup checks run and before the pipeline is built. Enable the crate's GTK 4.14 and DMA-BUF features so the zero-copy path exists in the release binary; confirm the exact feature names against the crate version in use. Users then need no distro package for the sink. Ubuntu 24.04 has none, which is the reason.
-- With the sink linked in, the startup check for `gtk4paintablesink` has nothing left to install: the check, its hint and the `no-sink` test case go.
+- Three guards, before anything is built: the tagged commit is on `main`; the tag, the version in `Cargo.toml` and the version in the README's status line are the same, and the README links to this release's tarball; the desktop entry validates (`desktop-file-validate`). `.github/scripts/check-release.sh` does the first two.
+- Build packages via `apt`: `libgtk-4-dev`, `libgstreamer1.0-dev`, `libgstreamer-plugins-base1.0-dev`, and `desktop-file-utils` for the guard. Nothing of PipeWire is needed to build: `pipewiresrc` is the system's plugin at run time.
+- `gtk4paintablesink` is linked statically: the `gst-plugin-gtk4` crate is a dependency and is registered at startup (`gstgtk4::plugin_register_static()`) before the startup checks run and before the pipeline is built. Its features are `gtk_v4_14`, `dmabuf` and `wayland` (crate version 0.15, which goes with gstreamer 0.25 and gtk4 0.11), so the zero-copy path exists in the release binary. Users then need no distro package for the sink. Ubuntu 24.04 has none, which is the reason.
+- A sink built for GTK 4.14 does not tell GTK the stream's colour state; that part of the crate needs GTK 4.20. Accepted: building on a newer image would raise the floor. The `srgb` switch, which was there to try the same thing by hand, is removed.
+- With the sink linked in, the startup check for `gtk4paintablesink` has nothing left to install: the check, its hint and the `no-sink` test case are gone.
 - `cargo fmt --check`, `cargo clippy` clean, tests green, then `cargo build --release`.
 
 ### Artifact
 
-- `meeseeks-vX.Y.Z-linux-x86_64.tar.gz` containing `meeseeks` (binary), `meeseeks.desktop`, `icons/meeseeks.svg` (from `assets/icon/meeseeks-icon.svg`), `LICENSE`, `README.md`.
-- Layout follows Rick's release tarballs (`Open-Breach/rick`, public) so Rick's tarball installer installs and uninstalls it unchanged.
-- The app has no application id yet. It gets one, and the desktop file matches it (file name or `StartupWMClass`), otherwise the dock shows a generic icon for the running window.
-- Attached to a GitHub Release created for the tag. The release body is a short list of what changed; the README is the user-facing release note.
+- `meeseeks-X.Y.Z-linux-x64.tar.gz`, Rick's name form, with one folder of the same name in it:
+
+  ```
+  meeseeks-X.Y.Z-linux-x64/
+    meeseeks
+    LICENSE
+    README.md
+    THIRD-PARTY-LICENSES.md
+    share/applications/meeseeks.desktop
+    share/icons/hicolor/scalable/apps/meeseeks.svg
+  ```
+
+  The desktop entry is `packaging/meeseeks.desktop`, the icon `assets/icon/meeseeks-icon.svg`. `.github/scripts/tarball.sh` packs it.
+- The layout is that of Rick's release tarballs (`Open-Breach/rick`, public) so Rick's tarball installer installs and uninstalls it unchanged.
+- `THIRD-PARTY-LICENSES.md` lists the licences of the crates the binary links, the MPL-2.0 sink among them. cargo-about generates it in the workflow from `about.toml` and `about.hbs`; a crate under a licence that `about.toml` does not accept stops the release.
+- The application id is `meeseeks`: the name the window carries, set in `src/main.rs`, and the name of the desktop entry, which also says `StartupWMClass=meeseeks`. Without the match the dock shows a generic icon for the running window. A reverse-DNS id is what Flatpak will want later; it would also make GTK single-instance.
+- Attached to a GitHub Release created for the tag. The release body is GitHub's generated notes; the README is the user-facing release note.
 
 ### Runtime requirements on the user's machine (from the system, not bundled)
 
 - Wayland session on GNOME (Mutter) or KDE Plasma (KWin).
 - xdg-desktop-portal with the GNOME or KDE backend: ScreenCast with the virtual source type; RemoteDesktop for teleporter mode.
 - PipeWire with the GStreamer PipeWire plugin (`pipewiresrc`).
-- GTK 4.14 or newer; GStreamer 1.x core and base; a glibc at least as new as the build image's.
+- GTK 4.14 or newer; GStreamer 1.24 or newer, core and base with its GL library; a glibc at least as new as the build image's, which is 2.39.
 - The startup checks cover all of these except the library floor in the last line: on an older GTK or glibc the binary does not load at all, so no dialog can say so. The README has to.
 
 ### Release sequence
@@ -61,8 +78,8 @@ Top to bottom:
 5. Requirements — **regenerated**
 6. Install — **regenerated**
 7. How to use it — **fixed**
-8. AI-written code warning — **fixed**, copied verbatim from Rick's README
-9. Join in — **fixed**, copied verbatim from Rick's README
+8. AI-written code warning — **fixed**, Meeseeks's own wording
+9. Join in — **fixed**, Meeseeks's own wording
 
 Then the licence as one line, and below it, as the last thing on the page, the app logo: `assets/icon/meeseeks-icon.png`, centred, 160 px wide.
 
@@ -116,20 +133,20 @@ Done? Press Stop. The monitor disappears and the desktop moves any windows left 
 ### 4. Screenshot
 
 - The idle state: the window before Start, showing the resolution selector and the Start button. No stream running.
-- Light and dark theme, two PNGs in `docs/screenshots/`, same window size every release. Shown with a `<picture>` element and `prefers-color-scheme` so it swaps with the reader's GitHub theme.
-- Taken fresh on the release build. The headless setup in `testing/` (sway and grim) can take them; if the result does not look like the app on GNOME, say so and Serge takes the two shots.
+- One PNG, `docs/screenshots/readme.png`, light: the app has no dark look and none is planned, so there is no `<picture>` element. The same window size every release: 1280×720 chosen, which makes a 1280×767 image with the title bar.
+- Taken fresh on the release build by `testing/tests/readme-shot.sh`, in the headless setup in `testing/` (sway and grim). If the result does not look like the app on GNOME, say so and Serge takes the shot.
 
 ### 5. Requirements
 
-- One line per startup check, in the order the app runs them, with the minimum version where a check has one. Generated from the checks in the code so the README and the dialog cannot drift apart.
+- One line per startup check, in the order the app runs them, with the minimum version where a check has one. Generated from the checks in the code so the README and the dialog cannot drift apart: `src/checks.rs` has the static list of the checks' names, the lines stand between two markers in the README, and a unit test fails when they are not the lines made from that list. It prints the lines the README should have. They are not written by hand.
 - The remote-control line says what it is for: the teleporter only. The app gives a monitor without it.
-- One more line for the floor no check covers: GTK 4.14 and the build image's glibc, with the distribution releases that meet it (Ubuntu 24.04, Fedora 40, Debian 13 or newer; verify at release time).
+- One more line for the floor no check covers: GTK 4.14, GStreamer 1.24 and the build image's glibc, with the distribution releases that meet it (Ubuntu 24.04, Fedora 40 with its updates, Debian 13 or newer; verify at release time).
 - A "Tested on" line: the desktops and distro versions this release was actually run on. Serge supplies it; the agent asks if it is unknown.
 - Closing line, verbatim: "Not sure? Just start Meeseeks. It checks each requirement and tells you what's missing."
 
 ### 6. Install
 
-- Link to the release tarball; unpack; run `./meeseeks`. Written from the actual state of the release, not from this spec.
+- Link to the release tarball; unpack; run `meeseeks` in the folder it unpacks to. Written from the actual state of the release, not from this spec.
 - One line: Rick's tarball installer installs and uninstalls it in one click.
 - One line linking to `docs/building.md` for building from source.
 
@@ -137,9 +154,11 @@ Done? Press Stop. The monitor disappears and the desktop moves any windows left 
 
 - Teleporter mode: decided 2026-11-14. Click-to-enter is approved, on by default with no switch, and merges before the first release (PR 5), so its texts are no longer pending. The "Mouse on air" sign is left out.
 - Monitor name in pickers: once it is known whether the GNOME rename to "Meeseeks" worked, add the one line in *How to use it* ("it shows up as Meeseeks" or "it shows up under a generic name, MetaVendor on GNOME").
-- Sections 8 and 9 are copied verbatim from Rick's README (`Open-Breach/rick`) when the README is first written.
+- Sections 8 and 9: Rick's texts say things that are not true of Meeseeks (three platforms, moving and deleting files, crates and modules), so they are not copied. The README has a first draft of Meeseeks's own, written 2026-11-15, for Serge to edit; from then on they are fixed texts like the others.
 
 ## 6. Issue draft — "Release workflow and README"
+
+As the issue was opened on 2026-11-14. Where it differs from the sections above (the runner, the two screenshots), the sections above hold.
 
 Add the tag-triggered release workflow and write the README per `docs/readme-and-release.md`.
 

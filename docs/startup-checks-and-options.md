@@ -2,6 +2,8 @@
 
 Three features for the Meeseeks prototype: a compatibility check on startup, a resolution selector, and an options dialog.
 
+> **Note, 2026-11-15.** This spec is left as it was written; two things in it no longer hold. The check for `gtk4paintablesink` was dropped: since the first release the sink is linked into the binary (`docs/readme-and-release.md`), because Ubuntu 24.04 has no package for it, so there is nothing left for a user to install and nothing to check. And of the experimental switches, `srgb` is gone, removed at the same time; `copy` is the one that remains.
+
 ## 1. Compatibility check on startup
 
 ### Goal

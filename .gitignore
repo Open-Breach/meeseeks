@@ -1,1 +1,4 @@
 /target
+# Made for a release, by cargo-about and .github/scripts/tarball.sh.
+/THIRD-PARTY-LICENSES.md
+/meeseeks-*.tar.gz

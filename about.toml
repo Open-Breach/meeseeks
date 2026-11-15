@@ -1,0 +1,17 @@
+# cargo-about: the licences of the crates the release binary links, for the
+# THIRD-PARTY-LICENSES.md in the release tarball
+# (`cargo about generate about.hbs`, run by .github/workflows/release.yml).
+# A crate under a licence that is not listed here stops the release.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    # gst-plugin-gtk4, the sink. about.hbs says where its source is.
+    "MPL-2.0",
+    # unicode-ident, for its tables of Unicode data.
+    "Unicode-3.0",
+]
+targets = ["x86_64-unknown-linux-gnu"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# Meeseeks itself is Apache-2.0 and not third party.
+private = { ignore = true }

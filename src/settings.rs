@@ -18,10 +18,8 @@ pub const MAX_SIDE: i32 = 8192;
 pub struct Settings {
     /// The renderer GTK is asked to draw with.
     pub renderer: Renderer,
-    /// The `MEESEEKS_TRY` switches `copy` and `srgb`; `src/display.rs` says
-    /// what they do.
+    /// The `MEESEEKS_TRY` switch `copy`; `src/display.rs` says what it does.
     pub try_copy: bool,
-    pub try_srgb: bool,
     /// Whether the window keeps the size of the virtual monitor, so that the
     /// picture is always shown pixel for pixel.
     pub lock_window_size: bool,
@@ -35,7 +33,6 @@ impl Default for Settings {
         Self {
             renderer: Renderer::default(),
             try_copy: false,
-            try_srgb: false,
             lock_window_size: true,
             width: 1920,
             height: 1080,
@@ -87,7 +84,7 @@ impl Settings {
 
     /// The switches that are on, the way `MEESEEKS_TRY` lists them.
     pub fn tries(&self) -> String {
-        [(self.try_copy, "copy"), (self.try_srgb, "srgb")]
+        [(self.try_copy, "copy")]
             .into_iter()
             .filter_map(|(on, name)| on.then_some(name))
             .collect::<Vec<_>>()

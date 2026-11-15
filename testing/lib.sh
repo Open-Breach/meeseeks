@@ -15,8 +15,6 @@ SETTINGS=$XDG_CONFIG_HOME/meeseeks/settings.toml
 
 # The headless compositor has no GPU.
 export GSK_RENDERER=${GSK_RENDERER:-cairo}
-# A gtk4paintablesink built by hand, where the distribution packages none.
-[ -d "$BUILD/plugins" ] && export GST_PLUGIN_PATH=$BUILD/plugins
 # What the mock portal starts in place of a virtual monitor.
 export MOCK_PRODUCER=${MOCK_PRODUCER:-$BUILD/picture-source}
 

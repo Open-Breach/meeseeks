@@ -668,8 +668,22 @@ fn activate(
     });
 }
 
+/// The application id: what the window says it belongs to, which is how the
+/// desktop finds `meeseeks.desktop` for it, and with that the icon in the
+/// dock. A plain name rather than a reverse-DNS one, because that is the name
+/// Rick's tarball installer gives the desktop entry.
+const APP_ID: &str = "meeseeks";
+
 fn main() -> glib::ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // GTK names the window's application after the program, which would
+    // otherwise be whatever the binary's file is called.
+    glib::set_prgname(Some(APP_ID));
+    // Before the startup checks and long before the pipeline: the sink is
+    // part of this binary and has to be made known to GStreamer.
+    if let Err(err) = display::init() {
+        log::error!("GStreamer could not be made ready: {err}");
+    }
     let settings = Settings::load();
     // SAFETY: nothing so far has started a thread, and GTK, which reads what
     // this sets, is not initialised yet.

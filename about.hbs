@@ -1,0 +1,33 @@
+# Third-party licenses
+
+Meeseeks is licensed under Apache-2.0 (see LICENSE). The binary in this
+archive links the third-party crates below; each is listed under its license
+with the license text, as `cargo about` collected them for the release.
+
+One of them, gst-plugin-gtk4, is under the Mozilla Public License 2.0. It is
+linked in unchanged; its source is at
+<https://crates.io/crates/gst-plugin-gtk4>, in the version named below.
+
+Meeseeks also uses libraries of your system that are not in this archive, GTK,
+GStreamer and PipeWire among them; those come with their own licenses.
+
+## Overview
+
+| License | Crates |
+| --- | --- |
+{{#each overview}}
+| {{{name}}} | {{count}} |
+{{/each}}
+
+## Licenses
+
+{{#each licenses}}
+### {{{name}}} ({{id}})
+
+Used by: {{#each used_by}}{{crate.name}} {{crate.version}}{{#unless @last}}, {{/unless}}{{/each}}
+
+```text
+{{{text}}}
+```
+
+{{/each}}

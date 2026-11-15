@@ -1,0 +1,58 @@
+name: release
+# A pushed tag vX.Y.Z on main cuts a release (docs/readme-and-release.md):
+# one job builds the Linux x86_64 binary on Ubuntu 24.04 and publishes a
+# GitHub Release with one tarball. Nothing else starts this, and nothing
+# else runs in this repository: no manual dispatch, no CI on branches.
+#
+# The runner's label comes from the repository variable RUNNER_LINUX_X64;
+# where it is not set, the job runs on GitHub's own ubuntu-24.04. It has to
+# be an Ubuntu 24.04 image either way: what that release ships (GTK 4.14,
+# GStreamer 1.24, glibc 2.39) is the least a user's system needs, and the
+# README says so.
+#
+# Every build is a cold one. A tag's run cannot read the cache another tag's
+# run saved, and nothing builds on main to save one there.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+  TAG: ${{ github.ref_name }}
+jobs:
+  release:
+    runs-on: ${{ vars.RUNNER_LINUX_X64 || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    steps:
+      # The whole history, so that the tagged commit can be looked for on main.
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      # First, so that a tag on the wrong commit stops before anything is
+      # built: the commit is on main, and the tag, Cargo.toml and the README
+      # name the same version.
+      - run: .github/scripts/check-release.sh "$TAG"
+      - name: build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            desktop-file-utils
+      - run: desktop-file-validate packaging/meeseeks.desktop
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "rustfmt, clippy" }
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --locked --release
+      # The licences of the crates the binary links, for the tarball.
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-about }
+      - run: cargo about generate --locked about.hbs -o THIRD-PARTY-LICENSES.md
+      - run: .github/scripts/tarball.sh "${TAG#v}"
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Meeseeks ${{ env.TAG }}
+          generate_release_notes: true
+          files: meeseeks-*.tar.gz
+          fail_on_unmatched_files: true

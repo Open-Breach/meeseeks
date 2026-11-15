@@ -58,6 +58,31 @@ impl Check {
     }
 }
 
+/// The checks by their names, as the dialog and the terminal show them. A
+/// check may add what it found after a colon: `Desktop: GNOME`.
+const WAYLAND_SESSION: &str = "Wayland session";
+const DESKTOP: &str = "Desktop";
+const PIPEWIRE: &str = "PipeWire running";
+const PORTAL: &str = "xdg-desktop-portal";
+const SCREENCAST: &str = "ScreenCast portal with virtual monitors";
+const REMOTE_CONTROL: &str = "Remote control, for the teleporter";
+const PIPEWIRESRC: &str = "GStreamer element pipewiresrc";
+const GTK_RENDERER: &str = "GTK 4 renderer";
+
+/// Every check, in the order [`run`] runs them. The README lists its
+/// requirements by these names and in this order, and a test below holds it
+/// to that, so that the README and the dialog cannot drift apart.
+const NAMES: [&str; 8] = [
+    WAYLAND_SESSION,
+    DESKTOP,
+    PIPEWIRE,
+    PORTAL,
+    SCREENCAST,
+    REMOTE_CONTROL,
+    PIPEWIRESRC,
+    GTK_RENDERER,
+];
+
 /// Runs every check, in the order they are shown. `asked` is the renderer
 /// GTK has been asked for, if it is a known one. Must be called on the GTK
 /// main thread, after GTK has been initialised.
@@ -67,25 +92,25 @@ pub async fn run(asked: Option<Renderer>) -> Vec<Check> {
     let portal_answers = portal.status == Status::Pass;
     let screencast = screencast(&bus, portal_answers).await;
     let remote_control = remote_control(&bus, portal_answers).await;
-    vec![
+    let checks = vec![
         wayland_session(),
         desktop(),
         pipewire(),
         portal,
         screencast,
         remote_control,
-        gst_element(
-            "pipewiresrc",
-            "Install the GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; \
-             Debian and Ubuntu: gstreamer1.0-pipewire; Arch: gst-plugin-pipewire).",
-        ),
-        gst_element(
-            "gtk4paintablesink",
-            "Install the GTK 4 sink from gst-plugins-rs (Fedora: gstreamer1-plugin-gtk4; \
-             Debian and Ubuntu: gstreamer1.0-gtk4; Arch: gst-plugin-gtk4).",
-        ),
+        pipewiresrc(),
         gtk_renderer(asked),
-    ]
+    ];
+    debug_assert!(
+        checks.len() == NAMES.len()
+            && checks
+                .iter()
+                .zip(NAMES)
+                .all(|(check, name)| check.name.starts_with(name)),
+        "NAMES has to list the checks as they are run"
+    );
+    checks
 }
 
 /// Whether any check says the app cannot work.
@@ -116,7 +141,7 @@ fn env_is_set(name: &str) -> bool {
 }
 
 fn wayland_session() -> Check {
-    let name = "Wayland session";
+    let name = WAYLAND_SESSION;
     if std::env::var("XDG_SESSION_TYPE").is_ok_and(|kind| kind == "wayland")
         || env_is_set("WAYLAND_DISPLAY")
     {
@@ -131,7 +156,7 @@ fn wayland_session() -> Check {
 }
 
 fn desktop() -> Check {
-    let name = "Desktop";
+    let name = DESKTOP;
     match desktop::current() {
         (Desktop::Gnome | Desktop::Kde, current) => Check::pass(format!("{name}: {current}")),
         (Desktop::Other, current) if current.is_empty() => Check::warn(
@@ -166,7 +191,7 @@ fn pipewire_sockets() -> Vec<PathBuf> {
 /// A connection to the daemon's socket is taken as the daemon running; no
 /// PipeWire is spoken over it.
 fn pipewire() -> Check {
-    let name = "PipeWire running";
+    let name = PIPEWIRE;
     let sockets = pipewire_sockets();
     if sockets
         .iter()
@@ -205,7 +230,7 @@ async fn session_bus() -> zbus::Result<zbus::Connection> {
 }
 
 async fn portal(bus: &zbus::Result<zbus::Connection>) -> Check {
-    let name = "xdg-desktop-portal";
+    let name = PORTAL;
     let bus = match bus {
         Ok(bus) => bus,
         Err(err) => {
@@ -237,7 +262,7 @@ async fn ping_portal(bus: &zbus::Connection) -> zbus::Result<()> {
 }
 
 async fn screencast(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) -> Check {
-    let name = "ScreenCast portal with virtual monitors";
+    let name = SCREENCAST;
     let bus = match bus {
         Ok(bus) if portal_answers => bus,
         _ => return Check::fail(name, "Needs xdg-desktop-portal, see above."),
@@ -249,7 +274,7 @@ async fn screencast(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) 
             format!(
                 "The ScreenCast portal of this desktop cannot create virtual \
                  monitors (its source types are {types}, without the 4 for \
-                 virtual). GNOME and KDE Plasma can."
+                 virtual). GNOME can, and KDE Plasma from 6.5 on."
             ),
         ),
         Err(err) => {
@@ -294,7 +319,7 @@ const DEVICE_TYPE_POINTER: u32 = 2;
 /// what `Session::start` will find; whether the user allows the pointer is
 /// asked in the desktop's dialog at every Start and cannot be known here.
 async fn remote_control(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) -> Check {
-    let name = "Remote control, for the teleporter";
+    let name = REMOTE_CONTROL;
     let without = |why: &str| {
         Check::warn(
             name,
@@ -330,14 +355,20 @@ async fn device_types(bus: &zbus::Connection) -> zbus::Result<u32> {
     portal_property(bus, REMOTE_DESKTOP_INTERFACE, "AvailableDeviceTypes").await
 }
 
-fn gst_element(factory: &str, hint: &str) -> Check {
-    let name = format!("GStreamer element {factory}");
+/// The element the frames come in through. It is the one GStreamer element
+/// the system has to bring: the sink is part of this binary.
+fn pipewiresrc() -> Check {
+    let name = PIPEWIRESRC;
     if let Err(err) = gst::init() {
         return Check::fail(name, format!("GStreamer cannot be initialised: {err}."));
     }
-    match gst::ElementFactory::make(factory).build() {
+    match gst::ElementFactory::make("pipewiresrc").build() {
         Ok(_) => Check::pass(name),
-        Err(_) => Check::fail(name, hint),
+        Err(_) => Check::fail(
+            name,
+            "Install the GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; \
+             Debian and Ubuntu: gstreamer1.0-pipewire; Arch: gst-plugin-pipewire).",
+        ),
     }
 }
 
@@ -345,7 +376,7 @@ fn gst_element(factory: &str, hint: &str) -> Check {
 /// at which one came out. GTK moves on to the next renderer by itself when
 /// the one it was asked for cannot be initialised, so a fallback is a warning.
 fn gtk_renderer(asked: Option<Renderer>) -> Check {
-    let name = "GTK 4 renderer";
+    let name = GTK_RENDERER;
     let probe = gtk::Window::new();
     WidgetExt::realize(&probe);
     let got = probe.renderer().map(|renderer| renderer.type_().name());
@@ -364,5 +395,70 @@ fn gtk_renderer(asked: Option<Renderer>) -> Check {
             ),
         ),
         _ => Check::pass(format!("{name}: {got_label}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What the README says a system needs for a check, with the least
+    /// version where there is one. A check without a line here fails the
+    /// test below.
+    fn needs(name: &str) -> &'static str {
+        match name {
+            WAYLAND_SESSION => "X11 is not supported.",
+            DESKTOP => {
+                "GNOME or KDE Plasma. On any other desktop Meeseeks warns and starts all the same."
+            }
+            PIPEWIRE => "The PipeWire daemon of your session.",
+            PORTAL => {
+                "With the backend for your desktop: xdg-desktop-portal-gnome or \
+                 xdg-desktop-portal-kde."
+            }
+            SCREENCAST => {
+                "This is what makes the monitor. GNOME has it, and KDE Plasma from 6.5 on."
+            }
+            REMOTE_CONTROL => {
+                "Only teleporter mode needs it, and only GNOME is asked for it so far. \
+                 Without it you still get the monitor."
+            }
+            PIPEWIRESRC => {
+                "The GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; Debian and \
+                 Ubuntu: gstreamer1.0-pipewire; Arch: gst-plugin-pipewire)."
+            }
+            GTK_RENDERER => {
+                "GL by default; the options have Vulkan and Cairo. If the one asked for \
+                 does not start, GTK falls back to another and Meeseeks says so."
+            }
+            _ => panic!("the README has no line for the check {name:?}; write one in `needs`"),
+        }
+    }
+
+    /// The README's Requirements section lists one line per check, between
+    /// two markers. The lines are made here and not written by hand: when
+    /// this fails, the README takes the lines it prints.
+    #[test]
+    fn the_readme_lists_the_checks() {
+        const BEGIN: &str = "<!-- generated:requirements -->\n";
+        const END: &str = "<!-- /generated:requirements -->";
+        let wanted: String = NAMES
+            .iter()
+            .map(|name| format!("- **{name}.** {}\n", needs(name)))
+            .collect();
+
+        let readme = include_str!("../README.md");
+        let begin = readme
+            .find(BEGIN)
+            .expect("the README has no requirements marker")
+            + BEGIN.len();
+        let end = readme
+            .find(END)
+            .expect("the README has no closing requirements marker");
+        assert!(
+            readme[begin..end] == wanted,
+            "the README's list of requirements is not the list of checks. \
+             Between its two markers it should have:\n{wanted}"
+        );
     }
 }

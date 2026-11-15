@@ -21,11 +21,6 @@ const FRAME_LOG_INTERVAL: u32 = 5;
 /// either becomes the only path or goes.
 #[derive(Default)]
 struct Tries {
-    /// `srgb`: tell the sink the frames are plain sRGB, whatever the stream
-    /// says. GTK only hands a frame to the compositor untouched if its colours
-    /// are in GTK's default state, and Mutter tags its stream as BT.709 with a
-    /// gamma 2.2 curve, which is not.
-    srgb: bool,
     /// `copy`: ask for the frames in shared memory only, never as DMA-BUFs.
     /// Frames in shared memory are copied as they arrive, see
     /// `settle_buffer_path`, so the compositor has each buffer straight back
@@ -46,7 +41,6 @@ impl Tries {
             .filter(|item| !item.is_empty())
         {
             match item {
-                "srgb" => tries.srgb = true,
                 "copy" => tries.copy = true,
                 _ => log::warn!("MEESEEKS_TRY: `{item}` is not something to try, ignoring it"),
             }
@@ -54,6 +48,16 @@ impl Tries {
         log::info!("trying: {list}");
         tries
     }
+}
+
+/// Makes GStreamer ready and registers `gtk4paintablesink`, which is linked
+/// into this binary rather than looked for among the system's plugins. To be
+/// called once at startup, before anything asks for an element.
+pub fn init() -> Result<(), Error> {
+    gst::init()?;
+    gstgtk4::plugin_register_static()?;
+    log::info!("gtk4paintablesink is linked into this binary and registered with GStreamer");
+    Ok(())
 }
 
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
@@ -135,9 +139,6 @@ impl Display {
             pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_, info| {
                 settle_buffer_path(&source, info)
             });
-            if tries.srgb {
-                pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, present_as_srgb);
-            }
         }
 
         let mut on_end = Some(on_end);
@@ -295,29 +296,6 @@ fn settle_buffer_path(
     gst::PadProbeReturn::Ok
 }
 
-/// Rewrites the caps on their way into the sink so that they claim sRGB. The
-/// frames themselves are untouched; only what the sink believes about their
-/// colours changes.
-fn present_as_srgb(_pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadProbeReturn {
-    let rewritten = match &info.data {
-        Some(gst::PadProbeData::Event(event)) => match event.view() {
-            gst::EventView::Caps(caps_event) => {
-                let mut caps = caps_event.caps_owned();
-                for structure in caps.make_mut().iter_mut() {
-                    structure.set("colorimetry", "sRGB");
-                }
-                gst::event::Caps::builder(&caps)
-                    .seqnum(event.seqnum())
-                    .build()
-            }
-            _ => return gst::PadProbeReturn::Ok,
-        },
-        _ => return gst::PadProbeReturn::Ok,
-    };
-    info.data = Some(gst::PadProbeData::Event(rewritten));
-    gst::PadProbeReturn::Ok
-}
-
 #[derive(Default)]
 struct FrameCounters {
     arrived: AtomicU64,
@@ -412,7 +390,8 @@ unsafe extern "C" fn frame_released(
 
 #[derive(Debug)]
 pub enum Error {
-    /// A GStreamer plugin the pipeline needs is not installed.
+    /// A GStreamer element the pipeline needs cannot be made. `pipewiresrc`
+    /// comes from a plugin of the system's, which may be missing.
     MissingElement(&'static str),
     /// GStreamer itself refused something.
     Gst(String),
@@ -423,7 +402,8 @@ impl fmt::Display for Error {
         match self {
             Self::MissingElement(factory) => write!(
                 f,
-                "GStreamer element `{factory}` not found; see the README for the package that provides it"
+                "GStreamer element `{factory}` not found; the startup checks name the package \
+                 that provides `pipewiresrc`"
             ),
             Self::Gst(message) => write!(f, "GStreamer: {message}"),
         }
