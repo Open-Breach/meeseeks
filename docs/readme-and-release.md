@@ -2,6 +2,8 @@
 
 Written 2026-11-14. Source of truth for how Meeseeks is built and released, and for how the README is maintained. Modeled on Rick's `specs/readme.md`; differences are deliberate.
 
+Updated 2026-11-14: the teleporter is decided (click-to-enter, on by default, in the first release), and the screenshot button (`docs/screenshot.md`) is in the features list.
+
 This spec lifts the "No CI, no packaging" rule in `CLAUDE.md` for exactly what is described here: one release workflow and one tarball. That line is updated as part of the work. Flatpak stays under "Later" in `SPEC.md`.
 
 ## 1. Release workflow
@@ -94,13 +96,14 @@ One caveat: Meeseeks reaches deep into the desktop, so it needs a few things in 
 - Resolution presets (1920×1080 by default, 1280×720, 2560×1440, 3840×2160, vertical 1080×1920, a few 4:3) and custom sizes.
 - Lock the window size, or let the window scale while the monitor keeps its resolution.
 - An options dialog for the renderer and other tuning switches.
-- *(pending test)* Teleporter mode: click in the window and your pointer is on the virtual monitor.
+- Teleporter mode: click in the window and your pointer is on the virtual monitor.
+- A screenshot button: the virtual monitor as a PNG at its exact resolution, saved to Pictures/Meeseeks.
 
 ### 7. How to use it
 
-Start Meeseeks, pick a resolution and press Start. From that moment your system has one more monitor. It appears in your display settings like any other, usually placed to the right of your real screen, and it behaves exactly like a physical one: push the mouse past the right edge and you're on it. The only difference is that it's drawn inside the Meeseeks window on your real screen. Drag the windows you want to show onto it, or launch them there.
+Start Meeseeks, pick a resolution, press Start and confirm the dialog your desktop shows. From that moment your system has one more monitor. It appears in your display settings like any other, usually placed to the right of your real screen, and it behaves exactly like a physical one: push the mouse past the right edge and you're on it. The only difference is that it's drawn inside the Meeseeks window on your real screen. Drag the windows you want to show onto it, or launch them there.
 
-*(pending test)* Meeseeks also has a teleporter mode: click anywhere in the Meeseeks window and your pointer jumps to that spot on the virtual monitor. For it to work, allow remote control when the system asks. During a demo this keeps you from getting sidetracked when the pointer slips off the edge.
+Meeseeks also has a teleporter mode: click anywhere in the Meeseeks window and your pointer jumps to that spot on the virtual monitor. For it to work, allow remote control when the system asks; on GNOME that is the switch "Allow Remote Interaction" in the dialog at Start, and it is off by default. The click that takes you there is not passed on, so clicking something on the monitor takes a second click. During a demo this keeps you from getting sidetracked when the pointer slips off the edge.
 
 Sharing in a meeting: in Zoom, Meet, Teams or whatever you use, share a screen, not a window, and pick the virtual monitor. *(pending: one line naming the monitor as it appears in the picker, once the GNOME rename result is known.)* Everything on it goes out; everything else stays private. Switch between apps on it as you like, and if one of them crashes, the share stays up.
 
@@ -119,6 +122,7 @@ Done? Press Stop. The monitor disappears and the desktop moves any windows left 
 ### 5. Requirements
 
 - One line per startup check, in the order the app runs them, with the minimum version where a check has one. Generated from the checks in the code so the README and the dialog cannot drift apart.
+- The remote-control line says what it is for: the teleporter only. The app gives a monitor without it.
 - One more line for the floor no check covers: GTK 4.14 and the build image's glibc, with the distribution releases that meet it (Ubuntu 24.04, Fedora 40, Debian 13 or newer; verify at release time).
 - A "Tested on" line: the desktops and distro versions this release was actually run on. Serge supplies it; the agent asks if it is unknown.
 - Closing line, verbatim: "Not sure? Just start Meeseeks. It checks each requirement and tells you what's missing."
@@ -131,7 +135,7 @@ Done? Press Stop. The monitor disappears and the desktop moves any windows left 
 
 ## 5. Open items
 
-- Teleporter mode: Serge tests it next. If it stays, the pending paragraph in *How to use it* and the pending feature line stay and the RemoteDesktop check joins the requirements; if not, all three go.
+- Teleporter mode: decided 2026-11-14. Click-to-enter is approved, on by default with no switch, and merges before the first release (PR 5), so its texts are no longer pending. The "Mouse on air" sign is left out.
 - Monitor name in pickers: once it is known whether the GNOME rename to "Meeseeks" worked, add the one line in *How to use it* ("it shows up as Meeseeks" or "it shows up under a generic name, MetaVendor on GNOME").
 - Sections 8 and 9 are copied verbatim from Rick's README (`Open-Breach/rick`) when the README is first written.
 
