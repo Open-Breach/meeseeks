@@ -12,6 +12,7 @@ use ashpd::zbus;
 use gtk::prelude::*;
 
 use crate::desktop::{self, Desktop};
+use crate::plasma::{self, NotAsked};
 use crate::renderer::Renderer;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,14 +85,15 @@ const NAMES: [&str; 8] = [
 ];
 
 /// Runs every check, in the order they are shown. `asked` is the renderer
-/// GTK has been asked for, if it is a known one. Must be called on the GTK
-/// main thread, after GTK has been initialised.
-pub async fn run(asked: Option<Renderer>) -> Vec<Check> {
+/// GTK has been asked for, if it is a known one, and `ask_remote_control`
+/// the option of that name, which counts on KDE Plasma. Must be called on
+/// the GTK main thread, after GTK has been initialised.
+pub async fn run(asked: Option<Renderer>, ask_remote_control: bool) -> Vec<Check> {
     let bus = session_bus().await;
     let portal = portal(&bus).await;
     let portal_answers = portal.status == Status::Pass;
     let screencast = screencast(&bus, portal_answers).await;
-    let remote_control = remote_control(&bus, portal_answers).await;
+    let remote_control = remote_control(&bus, portal_answers, ask_remote_control).await;
     let checks = vec![
         wayland_session(),
         desktop(),
@@ -150,7 +152,7 @@ fn wayland_session() -> Check {
         Check::fail(
             name,
             "This is not a Wayland session. X11 is not supported; log in to a \
-             GNOME or KDE Plasma session on Wayland.",
+             Wayland session of GNOME or of KDE Plasma 6.5 or later.",
         )
     }
 }
@@ -161,12 +163,13 @@ fn desktop() -> Check {
         (Desktop::Gnome | Desktop::Kde, current) => Check::pass(format!("{name}: {current}")),
         (Desktop::Other, current) if current.is_empty() => Check::warn(
             name,
-            "XDG_CURRENT_DESKTOP is not set. Meeseeks is made for GNOME and KDE Plasma; \
-             it may not work here.",
+            "XDG_CURRENT_DESKTOP is not set. Meeseeks is made for GNOME and for KDE \
+             Plasma 6.5 or later; it may not work here.",
         ),
         (Desktop::Other, current) => Check::warn(
             format!("{name}: {current}"),
-            "Meeseeks is made for GNOME and KDE Plasma; it may not work here.",
+            "Meeseeks is made for GNOME and for KDE Plasma 6.5 or later; it may not \
+             work here.",
         ),
     }
 }
@@ -269,14 +272,24 @@ async fn screencast(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) 
     };
     match source_types(bus).await {
         Ok(types) if types & SOURCE_TYPE_VIRTUAL != 0 => Check::pass(name),
-        Ok(types) => Check::fail(
-            name,
-            format!(
-                "The ScreenCast portal of this desktop cannot create virtual \
-                 monitors (its source types are {types}, without the 4 for \
-                 virtual). GNOME can, and KDE Plasma from 6.5 on."
-            ),
-        ),
+        Ok(types) => {
+            // An older Plasma gives no monitor at all, so that is said outright.
+            let who_can = match desktop::current().0 {
+                Desktop::Kde => {
+                    "KDE Plasma can from 6.5 on, so this Plasma is older: Meeseeks needs \
+                     Plasma 6.5 or later."
+                }
+                _ => "GNOME can, and KDE Plasma 6.5 or later.",
+            };
+            Check::fail(
+                name,
+                format!(
+                    "The ScreenCast portal of this desktop cannot create virtual \
+                     monitors (its source types are {types}, without the 4 for \
+                     virtual). {who_can}"
+                ),
+            )
+        }
         Err(err) => {
             log::warn!("{SCREENCAST_INTERFACE} does not answer: {err}");
             Check::fail(
@@ -318,7 +331,13 @@ const DEVICE_TYPE_POINTER: u32 = 2;
 /// app gives a monitor without it, so this warns and never fails. It says
 /// what `Session::start` will find; whether the user allows the pointer is
 /// asked in the desktop's dialog at every Start and cannot be known here.
-async fn remote_control(bus: &zbus::Result<zbus::Connection>, portal_answers: bool) -> Check {
+/// `ask` is the option that has Plasma not asked at all, which is the
+/// user's choice and nothing to warn about.
+async fn remote_control(
+    bus: &zbus::Result<zbus::Connection>,
+    portal_answers: bool,
+    ask: bool,
+) -> Check {
     let name = REMOTE_CONTROL;
     let without = |why: &str| {
         Check::warn(
@@ -334,9 +353,19 @@ async fn remote_control(bus: &zbus::Result<zbus::Connection>, portal_answers: bo
         _ => return without("it needs xdg-desktop-portal, see above."),
     };
     match desktop::current().0 {
+        Desktop::Kde => match plasma::asks_remote_control(bus, ask).await {
+            Ok(()) => {}
+            Err(NotAsked::SwitchedOff) => {
+                return Check::pass(format!("{name}: switched off in the options"));
+            }
+            Err(NotAsked::Older) => {
+                return without(
+                    "it needs KDE Plasma 6.6 or later, which this does not seem to be.",
+                );
+            }
+        },
         desktop if desktop.has_teleporter() => {}
-        Desktop::Kde => return without("on KDE Plasma it is not used yet."),
-        _ => return without("it is used on GNOME only so far."),
+        _ => return without("it is used on GNOME and on KDE Plasma 6.6 or later."),
     }
     match device_types(bus).await {
         Ok(types) if types & DEVICE_TYPE_POINTER != 0 => Check::pass(name),
@@ -409,7 +438,8 @@ mod tests {
         match name {
             WAYLAND_SESSION => "X11 is not supported.",
             DESKTOP => {
-                "GNOME or KDE Plasma. On any other desktop Meeseeks warns and starts all the same."
+                "GNOME, or KDE Plasma 6.5 or later. On any other desktop Meeseeks warns and \
+                 starts all the same."
             }
             PIPEWIRE => "The PipeWire daemon of your session.",
             PORTAL => {
@@ -417,11 +447,12 @@ mod tests {
                  xdg-desktop-portal-kde."
             }
             SCREENCAST => {
-                "This is what makes the monitor. GNOME has it, and KDE Plasma from 6.5 on."
+                "This is what makes the monitor. GNOME has it, and KDE Plasma 6.5 or later; \
+                 an older Plasma gives no monitor at all."
             }
             REMOTE_CONTROL => {
-                "Only teleporter mode needs it, and only GNOME is asked for it so far. \
-                 Without it you still get the monitor."
+                "Only teleporter mode needs it. Meeseeks asks GNOME for it, and KDE Plasma \
+                 6.6 or later. You get the monitor without it too."
             }
             PIPEWIRESRC => {
                 "The GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; Debian and \

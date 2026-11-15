@@ -231,7 +231,7 @@ A neutral, slightly cool light palette with GNOME blue as the only accent, and r
 **Character:** One face, the desktop's own, so the app reads like the desktop it runs on. No font is shipped and no family is named in the style sheet; sizes are percentages of the desktop's text size, so the app follows the user's font setting.
 
 ### Hierarchy
-- **Title 1** (`.mk-title-1`: 800, 160 %): "Choose a size" on the selector and the away message "Move this window back to a physical screen." One per page.
+- **Title 1** (`.mk-title-1`: 800, 160 %): "Choose a size" on the selector ("Virtual monitor" where the desktop decides the size, and the sizes are grey) and the away message "Move this window back to a physical screen." One per page.
 - **Title 2** (`.mk-title-2`: 800, 133 %): the sentence at the top of the startup-checks dialog.
 - **Start word** (`.mk-cap`: 700, 130 %, white, `text-shadow: 0 1px 1.5px alpha(black, 0.32)`): the word on the Start cap only.
 - **Heading** (`.mk-heading`: 700, 100 %): the name of a group of options above its card ("Experimental").
@@ -310,6 +310,7 @@ Two `GtkSpinButton`s (`.mk-spin`) with a dim × between them, 10 px apart.
 - **Style:** white, 1 px `control-border`, 8 px corners; the − and + buttons are 34 px wide, `control-bg`, divided by 1 px lines, with hover and pressed as plain buttons.
 - **Focus:** a 2 px `accent` outline on the whole field (`:focus-within`), set 1 px inside.
 - **Does not fit:** a line under the fields, 8 px below: the warning sign and the reason in `.mk-warning .mk-caption`.
+- **Notice:** the same sign and type under the Start button's hint, 12 px below, wrapping at 64 characters, for what the user has to know before the next Start; it goes when Start is pressed.
 
 ### Dialog buttons
 - **Plain** (`.mk-button`): `control-bg`, 1 px `control-border`, 8 px corners, padding 7 px 16 px, weight 500; `control-hover`, `control-active`.

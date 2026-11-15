@@ -31,25 +31,48 @@ const FIT_MARGIN: i32 = 90;
 const ICON: &[u8] = include_bytes!("../assets/icon/meeseeks-icon-192.png");
 const ICON_SIZE: i32 = 96;
 
+/// What the selector is headed with: where there is a size to choose, and
+/// where the desktop decides it.
+const TITLE: &str = "Choose a size";
+const TITLE_GIVEN: &str = "Virtual monitor";
+
+/// What is said under the sizes: why some are grey, or, where the desktop
+/// decides the size, that it does.
+const LEGEND_FIT: &str = "Greyed-out sizes do not fit on this screen.";
+const LEGEND_GIVEN: &str = "On KDE Plasma the desktop decides the size of the monitor. \
+                            The window follows at Start.";
+
 /// What the line under the Start button says: before Start, and while the
 /// desktop is being asked.
 const HINT_IDLE: &str = "Your desktop asks before the new screen appears.";
 const HINT_BUSY: &str = "Waiting for your desktop…";
 
+/// How wide a notice under the Start button runs before it wraps, in
+/// characters.
+const NOTICE_WIDTH: i32 = 64;
+
 pub struct Selector {
     root: gtk::ScrolledWindow,
-    /// The presets and the custom size.
+    /// The presets and the custom size, with the line under them.
     sizes: gtk::Box,
+    /// Whether the desktop decides the size of the monitor. There is then
+    /// nothing to choose: the sizes show what the monitor had last time.
+    given: bool,
     screen: gtk::Label,
     presets: Vec<((i32, i32), gtk::ToggleButton)>,
     width: gtk::SpinButton,
     height: gtk::SpinButton,
     warning: gtk::Box,
     warning_text: gtk::Label,
-    /// Says why some presets are grey; shown as long as one is.
+    /// Says why some presets are grey, as long as one is; or that the
+    /// desktop decides the size.
     legend: gtk::Label,
     start: gtk::Button,
     hint: gtk::Label,
+    /// Something the user has to know before the next Start, with the
+    /// warning sign; hidden while there is nothing.
+    notice: gtk::Box,
+    notice_text: gtk::Label,
     /// The room there is for the picture on the monitor, once one is known.
     available: Cell<Option<(i32, i32)>>,
     /// Set while the presets and the fields are brought in line, which is
@@ -59,8 +82,9 @@ pub struct Selector {
 }
 
 impl Selector {
-    /// A selector with `size` chosen.
-    pub fn new(size: (i32, i32)) -> Rc<Self> {
+    /// A selector with `size` chosen. `given` says that the desktop decides
+    /// the size of the monitor, see `Desktop::decides_size`.
+    pub fn new(size: (i32, i32), given: bool) -> Rc<Self> {
         let head = gtk::Box::new(gtk::Orientation::Vertical, 12);
         if let Ok(icon) = gdk::Texture::from_bytes(&glib::Bytes::from_static(ICON)) {
             head.append(
@@ -75,7 +99,7 @@ impl Selector {
         let titles = gtk::Box::new(gtk::Orientation::Vertical, 4);
         titles.append(
             &gtk::Label::builder()
-                .label("Choose a size")
+                .label(if given { TITLE_GIVEN } else { TITLE })
                 .css_classes(["mk-title-1"])
                 .build(),
         );
@@ -147,10 +171,12 @@ impl Selector {
         list.append(&row("Custom", &custom));
 
         let legend = gtk::Label::builder()
-            .label("Greyed-out sizes do not fit on this screen.")
+            .label(if given { LEGEND_GIVEN } else { LEGEND_FIT })
             .css_classes(["mk-dim", "mk-caption"])
-            .visible(false)
+            .visible(given)
             .build();
+        // The line stays readable; only what cannot be chosen is grey.
+        list.set_sensitive(!given);
         let sizes = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(10)
@@ -203,9 +229,25 @@ impl Selector {
             .label(HINT_IDLE)
             .css_classes(["mk-dim", "mk-caption"])
             .build();
+        let notice_text = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .max_width_chars(NOTICE_WIDTH)
+            .css_classes(["mk-warning", "mk-caption"])
+            .build();
+        let notice = gtk::Box::builder()
+            .spacing(8)
+            .halign(gtk::Align::Center)
+            .visible(false)
+            .build();
+        let sign = pictograms::warning();
+        sign.set_valign(gtk::Align::Start);
+        notice.append(&sign);
+        notice.append(&notice_text);
         let go = gtk::Box::new(gtk::Orientation::Vertical, 12);
         go.append(&collar);
         go.append(&hint);
+        go.append(&notice);
 
         let content = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -231,6 +273,7 @@ impl Selector {
         let selector = Rc::new(Self {
             root,
             sizes,
+            given,
             screen,
             presets,
             width,
@@ -240,6 +283,8 @@ impl Selector {
             legend,
             start,
             hint,
+            notice,
+            notice_text,
             available: Cell::new(None),
             syncing: Cell::new(false),
             on_change: RefCell::new(None),
@@ -345,12 +390,23 @@ impl Selector {
     }
 
     /// While busy, no size can be chosen and Start stays pressed in; the
-    /// line under it says what the wait is for.
+    /// line under it says what the wait is for. A notice from the Start
+    /// before goes: it was about that one.
     pub fn set_busy(&self, busy: bool) {
         self.sizes.set_sensitive(!busy);
         self.start.set_sensitive(!busy);
         self.hint
             .set_label(if busy { HINT_BUSY } else { HINT_IDLE });
+        if busy {
+            self.set_notice(None);
+        }
+    }
+
+    /// Shows `text` under the Start button, with the warning sign, until the
+    /// next Start; `None` takes it away.
+    pub fn set_notice(&self, text: Option<&str>) {
+        self.notice_text.set_label(text.unwrap_or_default());
+        self.notice.set_visible(text.is_some());
     }
 
     pub fn focus_start(&self) {
@@ -395,7 +451,7 @@ impl Selector {
             button.set_active(fits && *preset == size);
         }
         self.syncing.set(false);
-        self.legend.set_visible(!all_fit);
+        self.legend.set_visible(self.given || !all_fit);
 
         self.warning.set_visible(!self.fits(size));
         if let Some((room_w, room_h)) = self.available.get() {

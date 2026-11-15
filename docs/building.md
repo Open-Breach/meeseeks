@@ -4,7 +4,7 @@ For people working on the code. To use Meeseeks, take the release tarball: see [
 
 ## How to try
 
-You need a Wayland session on GNOME or KDE Plasma and a current stable Rust toolchain (1.96 or newer; [rustup](https://rustup.rs) if your distribution's is older). From the distribution you need the GTK 4 and GStreamer development files to build, GTK 4.14 and GStreamer 1.24 or newer, and one GStreamer plugin to run: the PipeWire one (`pipewiresrc`). The GTK 4 sink (`gtk4paintablesink`) is built into the binary, so no package is needed for it.
+You need a Wayland session on GNOME, or on KDE Plasma 6.5 or later, and a current stable Rust toolchain (1.96 or newer; [rustup](https://rustup.rs) if your distribution's is older). From the distribution you need the GTK 4 and GStreamer development files to build, GTK 4.14 and GStreamer 1.24 or newer, and one GStreamer plugin to run: the PipeWire one (`pipewiresrc`). The GTK 4 sink (`gtk4paintablesink`) is built into the binary, so no package is needed for it.
 
 Fedora:
 
@@ -26,9 +26,11 @@ cargo run
 
 If the system lacks something the app needs, a dialog lists what instead of the window; the same list goes to the terminal.
 
-The window opens with a choice of sizes for the virtual monitor: presets, or a width and height of your own. Resizing the window chooses a size too: the width and height follow it. Presets that do not fit on your screen are greyed out. Press **Start** and approve the portal's dialog. The desktop should gain a second monitor of the chosen size, and the window shows what is on it, pixel for pixel. Move windows there with the mouse or Super+Shift+Arrow. **Stop** in the title bar, or closing the window, removes the monitor again.
+The window opens with a choice of sizes for the virtual monitor: presets, or a width and height of your own. Resizing the window chooses a size too: the width and height follow it. Presets that do not fit on your screen are greyed out. On KDE Plasma there is no size to choose: the desktop decides it, 1920×1080 or, from Plasma 6.8, the one picked in its dialog, and the window takes that size at Start. Press **Start** and approve the portal's dialog. The desktop should gain a second monitor of the chosen size, and the window shows what is on it, pixel for pixel. Move windows there with the mouse or Super+Shift+Arrow. **Stop** in the title bar, or closing the window, removes the monitor again.
 
-A left click on the picture sends the mouse pointer to that spot of the virtual monitor, so there is no edge to find. The desktop has to allow that: on GNOME, switch **Allow Remote Interaction** on in the dialog at Start. It is off as it comes, and without it the monitor works all the same. The click only places the pointer and is not passed on; from there the mouse works on the virtual monitor as on any other and leaves it over its edge. Nothing is typed or clicked for you. On KDE Plasma the click does nothing yet.
+A left click on the picture sends the mouse pointer to that spot of the virtual monitor, so there is no edge to find. The desktop has to allow that: on GNOME, switch **Allow Remote Interaction** on in the dialog at Start. It is off as it comes, and without it the monitor works all the same. The click only places the pointer and is not passed on; from there the mouse works on the virtual monitor as on any other and leaves it over its edge. Nothing is typed or clicked for you.
+
+On KDE Plasma 6.6 or later, Start asks for remote control along with the monitor, and Plasma's dialog allows both or neither: denied, there is no monitor, and the window says so. **Options** has a switch for it there, **Ask for remote control**; off, Plasma is asked for the monitor alone and the click does nothing. On Plasma 6.5 remote control is not asked for.
 
 While the monitor runs, the camera button next to **Stop** saves what is on it as a PNG file, at the monitor's own size whatever size the window is, in the folder `Meeseeks` of your Pictures folder.
 

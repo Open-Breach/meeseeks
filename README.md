@@ -35,11 +35,11 @@ One caveat: Meeseeks reaches deep into the desktop, so it needs a few things in 
 
 <!-- generated:requirements -->
 - **Wayland session.** X11 is not supported.
-- **Desktop.** GNOME or KDE Plasma. On any other desktop Meeseeks warns and starts all the same.
+- **Desktop.** GNOME, or KDE Plasma 6.5 or later. On any other desktop Meeseeks warns and starts all the same.
 - **PipeWire running.** The PipeWire daemon of your session.
 - **xdg-desktop-portal.** With the backend for your desktop: xdg-desktop-portal-gnome or xdg-desktop-portal-kde.
-- **ScreenCast portal with virtual monitors.** This is what makes the monitor. GNOME has it, and KDE Plasma from 6.5 on.
-- **Remote control, for the teleporter.** Only teleporter mode needs it, and only GNOME is asked for it so far. Without it you still get the monitor.
+- **ScreenCast portal with virtual monitors.** This is what makes the monitor. GNOME has it, and KDE Plasma 6.5 or later; an older Plasma gives no monitor at all.
+- **Remote control, for the teleporter.** Only teleporter mode needs it. Meeseeks asks GNOME for it, and KDE Plasma 6.6 or later. You get the monitor without it too.
 - **GStreamer element pipewiresrc.** The GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; Debian and Ubuntu: gstreamer1.0-pipewire; Arch: gst-plugin-pipewire).
 - **GTK 4 renderer.** GL by default; the options have Vulkan and Cairo. If the one asked for does not start, GTK falls back to another and Meeseeks says so.
 <!-- /generated:requirements -->
@@ -70,7 +70,7 @@ Start Meeseeks, pick a resolution, press Start and confirm the dialog your deskt
 
 Meeseeks also has a teleporter mode: click anywhere in the Meeseeks window and your pointer jumps to that spot on the virtual monitor. For it to work, allow remote control when the system asks; on GNOME that is the switch "Allow Remote Interaction" in the dialog at Start, and it is off by default. The click that takes you there is not passed on, so clicking something on the monitor takes a second click. During a demo this keeps you from getting sidetracked when the pointer slips off the edge.
 
-Sharing in a meeting: in Zoom, Meet, Teams or whatever you use, share a screen, not a window, and pick the virtual monitor. *(pending: one line naming the monitor as it appears in the picker, once the GNOME rename result is known.)* Everything on it goes out; everything else stays private. Switch between apps on it as you like, and if one of them crashes, the share stays up.
+Sharing in a meeting: in Zoom, Meet, Teams or whatever you use, share a screen, not a window, and pick the virtual monitor. Everything on it goes out; everything else stays private. Switch between apps on it as you like, and if one of them crashes, the share stays up.
 
 Recording: in OBS or your recorder, add the virtual monitor as a screen source. You get a video at exactly the resolution you picked, with nothing else in the frame.
 

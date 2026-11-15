@@ -76,16 +76,19 @@ pub struct Display {
 impl Display {
     /// Starts showing PipeWire node `node_id` of the remote behind `fd`.
     ///
-    /// `width` and `height` are the size asked of the stream. On GNOME the
+    /// `size` is the width and height asked of the stream. On GNOME the
     /// virtual monitor takes whatever size the format negotiation settles
-    /// on, so this is what gives it its size.
+    /// on, so this is what gives it its size. `None` asks for no size and
+    /// takes the one the stream has: on KDE Plasma the monitor is made
+    /// before the stream is asked for, and a stream of a monitor that is
+    /// there already cannot be had in another size.
     ///
     /// `on_end` is called once, from the main loop, if the pipeline fails or
     /// the stream ends on its own. Must be called on the GTK main thread.
     pub fn new(
         fd: OwnedFd,
         node_id: u32,
-        (width, height): (i32, i32),
+        size: Option<(i32, i32)>,
         on_end: impl FnOnce() + 'static,
     ) -> Result<Self, Error> {
         gst::init()?;
@@ -104,12 +107,13 @@ impl Display {
         sink.set_property("sync", false);
         let paintable = sink.property::<gdk::Paintable>("paintable");
 
-        // The size is what is asked of the stream. With any caps features the
-        // sink's DMA-BUF caps pass as well as its plain memory ones; without
-        // them the caps mean plain memory only.
-        let wanted = gst::Caps::builder("video/x-raw")
-            .field("width", width)
-            .field("height", height);
+        // The size, where there is one, is what is asked of the stream. With
+        // any caps features the sink's DMA-BUF caps pass as well as its plain
+        // memory ones; without them the caps mean plain memory only.
+        let mut wanted = gst::Caps::builder("video/x-raw");
+        if let Some((width, height)) = size {
+            wanted = wanted.field("width", width).field("height", height);
+        }
         let wanted = if tries.copy {
             wanted.build()
         } else {

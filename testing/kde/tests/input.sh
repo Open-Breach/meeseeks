@@ -2,18 +2,19 @@
 # The teleporter on a real KWin with the KDE portal: where the desktop's
 # cursor ends up when the picture is clicked.
 #
-# The app does not ask Plasma for remote control. This test is for a build
-# that does, which is not in the repository: it needs the one line in
-# src/desktop.rs changed so that Plasma has the teleporter, and APP pointing
-# at that build. With the app as it is, the test shows the plain session and
-# clicks that send nothing.
+# The app asks Plasma for remote control where the portal backend has the
+# mark of 6.6 or later, see src/plasma.rs. On an older one, such as a build
+# of 6.5 given as KDE_BACKEND, it opens the plain session, and this test
+# shows clicks that send nothing.
 #
 # Usage: input.sh [approve|deny]
 #
 # approve  Plasma's "Remote Control" dialog is answered with Return, which is
 #          Approve.
 # deny     It is answered with a click on Deny. The dialog has no way to give
-#          the monitor and keep the pointer back, so there is no monitor then.
+#          the monitor and keep the pointer back, so there is no monitor then,
+#          and the window says so under its Start button
+#          (out/kde-input-deny-denied.png).
 #          The button is clicked where it is on a screen of 1100x700, the
 #          size in-vm.sh gives; out/kde-input-deny-dialog.png shows it.
 #
@@ -28,6 +29,8 @@ case $way in
   *) echo "usage: input.sh [approve|deny]" >&2; exit 1 ;;
 esac
 write_settings "width = 1920" "height = 1080"
+# A window that fits the screen in-vm.sh gives, so that all of it is seen.
+[ "$way" = deny ] && write_settings "width = 1000" "height = 560"
 start_hands "$name"
 hand move 20 20
 RUST_LOG=info,meeseeks::input=debug,meeseeks::pointer=debug \

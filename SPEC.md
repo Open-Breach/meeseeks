@@ -32,7 +32,7 @@ Out of scope for the prototype:
 | Environment | Status | Path |
 | --- | --- | --- |
 | GNOME (Mutter) | Prototype target | Portal, virtual source type. Monitor size follows the PipeWire format negotiation. |
-| KDE Plasma (KWin) | Prototype target | Portal, virtual source type. KWin creates a 1920×1080 output at 1× scale; the user places it in the layout OSD. |
+| KDE Plasma (KWin), 6.5 or later | Prototype target | Portal, virtual source type; an older Plasma has none. KWin creates the output at a size of its own, 1920×1080 at 1× scale, or from Plasma 6.8 the size picked in the portal's dialog, and the window follows it; the user places it in the layout OSD. |
 | wlroots (Sway, Hyprland, …) | Later | No virtual source in the portal; create a headless output through the compositor's own command, then capture it as an ordinary monitor. One small backend per compositor. |
 | COSMIC | Later, if ever | Portal has ScreenCast but no virtual source yet; ordinary capture still unreliable. Would become the same portal call once supported. |
 | Cinnamon / X11 | Out | X11; no virtual monitor machinery. |
@@ -43,7 +43,7 @@ The distribution underneath does not matter; only the compositor does.
 
 Three modules with a hard boundary between the first two, so the display layer can be swapped without touching the session code.
 
-1. **Session** — owns the portal conversation. Opens a ScreenCast session, selects a single source of type *virtual* with cursor mode *embedded*, starts it, receives the PipeWire node id, opens the PipeWire remote and hands back the file descriptor plus node id. On GNOME the session is a RemoteDesktop one with that screen cast in it, so the same dialog also grants the pointer; the monitor is there whether or not the user allows it. Closes the session on stop. Knows nothing about rendering.
+1. **Session** — owns the portal conversation. Opens a ScreenCast session, selects a single source of type *virtual* with cursor mode *embedded*, starts it, receives the PipeWire node id, opens the PipeWire remote and hands back the file descriptor plus node id. On GNOME the session is a RemoteDesktop one with that screen cast in it, so the same dialog also grants the pointer; the monitor is there whether or not the user allows it. On KDE Plasma 6.6 or later it is one too, unless the user has switched that off in the options: Plasma's dialog allows the pointer and the monitor or neither, and a denied one is not followed by a second session. Closes the session on stop. Knows nothing about rendering.
 2. **Display** — owns one GStreamer pipeline and one widget. Takes a file descriptor and node id, builds `pipewiresrc` into `gtk4paintablesink`, and exposes the sink's paintable to the window. Requests 1920×1080 in the caps so GNOME sizes the monitor accordingly. Knows nothing about portals.
 3. **Shell** — one GTK 4 window: a start/stop button and the picture. Nothing else.
 
@@ -60,7 +60,7 @@ Why not egui: the UI is a button and a picture, and the cost that matters is mov
 
 ## Behaviour
 
-**Start.** The portal shows its picker; the user approves the virtual screen and, on GNOME, may allow remote interaction with it, which is what the click needs. The monitor appears in the desktop's display layout (GNOME places it; KDE shows a placement OSD). The window begins showing the stream.
+**Start.** The portal shows its picker; the user approves the virtual screen and, on GNOME, may allow remote interaction with it, which is what the click needs; on KDE Plasma 6.6 or later the one approval is for both. The monitor appears in the desktop's display layout (GNOME places it; KDE shows a placement OSD). The window begins showing the stream.
 
 **While running.** Drag any window past the edge into the virtual monitor, or send it with the keyboard. Work there as on any monitor; the cursor is drawn in the stream. A left click on the picture puts the pointer on that spot of the monitor, if remote interaction was allowed; moving over the picture does nothing. Resize the viewer window freely; the picture keeps 16:9 and letterboxes.
 

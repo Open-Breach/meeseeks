@@ -2,7 +2,7 @@
 # The teleporter against the mock portal's RemoteDesktop: what the app sends
 # when the picture is clicked, and that it still gives a monitor where remote
 # control cannot be had.
-# Usage: input.sh [stay|warp|nosize|denied|absent|kde] [locked|unlocked]
+# Usage: input.sh [stay|warp|nosize|denied|absent|kde|kde-6.6|kde-off|kde-denied] [locked|unlocked]
 #
 # stay    The portal takes every position and only prints it; the cursor stays
 #         in the window. No desktop does that, but it shows everything the app
@@ -18,24 +18,33 @@
 #         Interaction" left off. The monitor is there; a click sends nothing.
 # absent  The portal has no RemoteDesktop interface. The app opens the plain
 #         ScreenCast session instead, with its one Start.
-# kde     The desktop says it is KDE. The app does not ask for remote control
-#         there and opens the plain ScreenCast session, although this portal
-#         would offer it.
+# kde     The desktop says it is KDE, and nothing on the bus answers as its
+#         portal backend with the mark of Plasma 6.6. The app does not ask
+#         for remote control there and opens the plain ScreenCast session,
+#         although this portal would offer it.
+# kde-6.6 The same with that mark: the app asks, and sends positions with the
+#         portal's own call, since the portal gives a size for the stream.
+# kde-off The mark is there and "Ask for remote control" is off in the
+#         settings: the plain ScreenCast session again.
+# kde-denied  The mark is there and Start is answered as Plasma's dialog is
+#         with Deny. There is no monitor and no second session; the window
+#         says why under the Start button (out/input-kde-denied-*-notice.png).
 #
-# In all but `kde` the desktop says it is GNOME, the one the app asks for
-# remote control on.
+# In all but the `kde` ones the desktop says it is GNOME.
 #
 # The mouse here is a virtual pointer that is told where to be. A real mouse
 # says how far it moved, so on a desktop the cursor would not come back from
 # the monitor to a spot in the window the way it does here between the steps.
 . "$T/lib.sh"
-usage="usage: input.sh [stay|warp|nosize|denied|absent|kde] [locked|unlocked]"
+usage="usage: input.sh [stay|warp|nosize|denied|absent|kde|kde-6.6|kde-off|kde-denied] [locked|unlocked]"
 portal=${1:-stay}
 lock=${2:-locked}
 name=input-$portal-$lock
 
-write_settings "width = 1280" "height = 720"
-[ "$lock" = unlocked ] && write_settings "width = 1280" "height = 720" "lock_window_size = false"
+settings=("width = 1280" "height = 720")
+[ "$lock" = unlocked ] && settings+=("lock_window_size = false")
+[ "$portal" = kde-off ] && settings+=("ask_remote_control = false")
+write_settings "${settings[@]}"
 export XDG_CURRENT_DESKTOP=GNOME
 # What a click on the picture is expected to bring.
 expect="a position of that spot"
@@ -46,6 +55,9 @@ case $portal in
   denied) export MOCK_STREAM_SIZE=1280x720 MOCK_DEVICES=0; expect="nothing, the pointer was not granted" ;;
   absent) export MOCK_STREAM_SIZE=1280x720 MOCK_REMOTE=0; expect="nothing, there is no pointer" ;;
   kde) export MOCK_STREAM_SIZE=1280x720 XDG_CURRENT_DESKTOP=KDE; expect="nothing, there is no pointer" ;;
+  kde-6.6) export MOCK_STREAM_SIZE=1280x720 XDG_CURRENT_DESKTOP=KDE MOCK_KDE_MARKER=1 ;;
+  kde-off) export MOCK_STREAM_SIZE=1280x720 XDG_CURRENT_DESKTOP=KDE MOCK_KDE_MARKER=1; expect="nothing, there is no pointer" ;;
+  kde-denied) export MOCK_STREAM_SIZE=1280x720 XDG_CURRENT_DESKTOP=KDE MOCK_KDE_MARKER=1 MOCK_START_RESPONSE=1 ;;
   *) echo "$usage" >&2; exit 1 ;;
 esac
 start_portal "$name"
@@ -81,6 +93,17 @@ echo "== the pointer rests on the middle of the window while Start is pressed: n
 hand move $((x + 640)) $((py + 360))
 press_button; sleep 3
 sent
+if [ "$portal" = kde-denied ]; then
+  echo "== the dialog was denied: no monitor, and the window says why"
+  shot "$name-notice"
+  echo "== Start once more, denied again: one more request, no second session behind it"
+  press_button; sleep 3
+  close_window
+  report_exit
+  echo "--- app log"; applog "$OUT/$name-app.log"
+  echo "--- portal log"; grep -v -e '^\[producer\] state' "$OUT/$name-portal.log"
+  exit 0
+fi
 echo "== the output that stands in for the virtual monitor appears"
 swaymsg -q create_output; sleep 0.5
 swaymsg -q output HEADLESS-2 resolution 1280x720; sleep 0.5

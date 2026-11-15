@@ -12,6 +12,7 @@ mod input;
 mod mirror;
 mod options;
 mod pictograms;
+mod plasma;
 mod pointer;
 mod renderer;
 mod screenshot;
@@ -28,6 +29,7 @@ use std::time::Instant;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 
+use desktop::Desktop;
 use display::Display;
 use environment::Environment;
 use input::Input;
@@ -47,6 +49,14 @@ const AWAY: &str = "away";
 const AWAY_MESSAGE: &str = "Move this window back to a physical screen.";
 const AWAY_REASON: &str =
     "It is on its own virtual monitor. The picture is paused until it is back.";
+
+/// What the selector says after Plasma's dialog was answered with Deny.
+/// That dialog allows remote control and the monitor or neither, and no
+/// second session is opened behind the user's back to get the monitor alone.
+const DENIED_ON_PLASMA: &str = "No monitor: remote control was denied. Meeseeks asks for it so \
+                                that a click on the picture can place the pointer there. Press \
+                                Start again and approve, or turn off “Ask for remote control” in \
+                                the options.";
 
 /// A started virtual monitor: the portal session that keeps it alive and the
 /// pipeline that shows it.
@@ -124,6 +134,9 @@ impl Shell {
                     log::error!("could not start: {err}");
                     shell.release_window();
                     shell.selector.set_busy(false);
+                    if denied_on_plasma(err.as_ref()) {
+                        shell.selector.set_notice(Some(DENIED_ON_PLASMA));
+                    }
                     // Being busy cost the button the focus.
                     shell.selector.focus_start();
                 }
@@ -131,8 +144,22 @@ impl Shell {
         });
     }
 
-    async fn open(self: &Rc<Self>, size: (i32, i32)) -> Result<Running, Box<dyn Error>> {
-        let (session, stream, pointer) = Session::start().await?;
+    async fn open(self: &Rc<Self>, chosen: (i32, i32)) -> Result<Running, Box<dyn Error>> {
+        let ask_remote_control = self.settings.borrow().ask_remote_control;
+        let (session, stream, pointer) = Session::start(ask_remote_control).await?;
+        // Where the desktop has made the monitor already, at a size of its
+        // own, that size is the one to show; the stream is asked for none.
+        // Everywhere else the size asked of the stream is the chosen one.
+        let size = match stream
+            .size
+            .filter(|&(width, height)| width > 0 && height > 0)
+        {
+            Some(made) => {
+                self.take_size(made, chosen);
+                None
+            }
+            None => Some(chosen),
+        };
 
         // The pipeline calls this from its own bus handler; stop from a fresh
         // main loop turn rather than tearing the pipeline down under it.
@@ -274,17 +301,44 @@ impl Shell {
     fn show_options(self: &Rc<Self>) {
         let weak = Rc::downgrade(self);
         let settings = self.settings.borrow().clone();
-        options::show(&self.window, &settings, self.overridden, move |settings| {
-            let Some(shell) = weak.upgrade() else {
-                return Ok(());
-            };
-            settings.save()?;
-            // Closing the window stops what is running and ends the
-            // application; `main` takes it from there.
-            shell.restart.set(true);
-            shell.window.close();
-            Ok(())
-        });
+        let on_plasma = desktop::current().0 == Desktop::Kde;
+        options::show(
+            &self.window,
+            &settings,
+            self.overridden,
+            on_plasma,
+            move |settings| {
+                let Some(shell) = weak.upgrade() else {
+                    return Ok(());
+                };
+                settings.save()?;
+                // Closing the window stops what is running and ends the
+                // application; `main` takes it from there.
+                shell.restart.set(true);
+                shell.window.close();
+                Ok(())
+            },
+        );
+    }
+
+    /// The desktop has made the monitor `made` large, whatever was chosen.
+    /// The selector, the settings and the window follow.
+    fn take_size(&self, made: (i32, i32), chosen: (i32, i32)) {
+        if made == chosen {
+            return;
+        }
+        log::info!(
+            "the desktop made the monitor {}×{}, not the {}×{} chosen; the window follows",
+            made.0,
+            made.1,
+            chosen.0,
+            chosen.1
+        );
+        self.selector.set_size(made);
+        self.remember(made);
+        self.give_stage(self.selector.picture_area());
+        // Again, for the lock to hold the window at the new size.
+        self.hold_window();
     }
 
     /// Keeps the size for the next time the app is started.
@@ -436,7 +490,10 @@ fn build_window(
     overridden: options::Overridden,
     restart: Rc<Cell<bool>>,
 ) {
-    let selector = Selector::new((settings.width, settings.height));
+    let selector = Selector::new(
+        (settings.width, settings.height),
+        desktop::current().0.decides_size(),
+    );
 
     // Contain scales the picture to fit and keeps its aspect ratio; what is
     // left over of the window stays empty.
@@ -651,7 +708,7 @@ fn activate(
     let hold = app.hold();
     let app = app.clone();
     glib::spawn_future_local(async move {
-        let checks = checks::run(asked).await;
+        let checks = checks::run(asked, settings.ask_remote_control).await;
         if checks::failed(&checks) {
             eprint!("{}", checks::report(&checks));
             checks_dialog::show(&app, &checks);
@@ -666,6 +723,16 @@ fn activate(
         }
         drop(hold);
     });
+}
+
+/// Whether a Start failed because Plasma's dialog was answered with Deny.
+/// GNOME's dialog can be cancelled too, but there that is not how remote
+/// control is refused: it has a switch for that, and a monitor either way.
+fn denied_on_plasma(err: &(dyn Error + 'static)) -> bool {
+    matches!(
+        err.downcast_ref::<session::Error>(),
+        Some(session::Error::RemoteDeclined)
+    ) && desktop::current().0 == Desktop::Kde
 }
 
 /// The application id: what the window says it belongs to, which is how the
