@@ -21,7 +21,9 @@ Approval, 2026-11-14: on the reworked button Serge wrote "yes its aprooved desig
 
 Status, 2026-11-15: built in GTK on the branch `claude/charming-cori-1w7kav` (`src/style.rs`, `src/selector.rs`, `src/main.rs`, `src/options.rs`, `src/checks_dialog.rs`, `src/pictograms.rs`). Mock-ups: https://www.figma.com/design/uXzAlU04u3O3OMb6bVaZK8, page "Redesign". The build has been run only in the repo's headless test desktop (sway, GTK 4.14, its default theme), never on GNOME or KDE.
 
-Where the build knowingly differs from the mock-ups: the list takes its natural width instead of a fixed 560 px; the chosen preset keeps the weight of the others, so that choosing does not shift the row; the drop-down's arrow is the desktop theme's; the system font at relative sizes stands where the mock-ups have Inter.
+Where the build knowingly differs from the mock-ups: the list takes its natural width instead of a fixed 560 px; the chosen preset keeps the weight of the others, so that choosing does not shift the row; the drop-down's arrow is the desktop theme's; the system font at relative sizes stands where the mock-ups have Inter; the word on Start is 130 % of the text size rather than 120 %, so that it counts as large text on the cap's blue; the restart question is GTK's own alert, as the mock-up's caption says, and GTK sets its detail flush left where the mock-up drew it centred. The alert was kept because it brings the desktop's behaviour with it (Escape, Return, the screen reader's alert role).
+
+No measured comparison with the mock-ups exists: Impeccable's measuring tools read web pages only. That the build matches rests on the finish review's side-by-side reading and on pixel samples of the Start button.
 
 ## Direction contract
 
@@ -31,7 +33,7 @@ OWN-WORLD: The GNOME utility idiom, in plain GTK. A near-white window (#FAFAFB),
 
 STORY: A stranger sees the icon and the question, picks a size that fits, presses Start, and from then on sees only the picture.
 
-FIRST VIEWPORT: The desktop's own header bar with the title and Options. A centred column 560 px wide: the app icon at 96 px, "Choose a size", the screen's size, the list card with rows 16:9, 4:3, Vertical and Custom, a line about greyed-out sizes, the round Start (a 96 px cap in a 116 px collar), and one line about the desktop's dialog.
+FIRST VIEWPORT: The desktop's own header bar with the title and Options. A centred column as wide as the list comes out (about 510 px at the usual font size): the app icon at 96 px, "Choose a size", the screen's size, the list card with rows 16:9, 4:3, Vertical and Custom, a line about greyed-out sizes, the round Start (a 96 px cap in a 116 px collar), and one line about the desktop's dialog.
 
 FORM: The category standard, the round's standing exit, taken in Serge's words ("the last one"); seed:6c82f9c9e41c536f.
 
@@ -39,6 +41,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 ## Unresolved
 
-- How the window looks on GNOME and on KDE Plasma (Breeze); neither has been rendered. Under GTK's dark variant the title bar goes dark and the app's own surfaces stay light: there is no dark palette yet.
+- How the window looks on GNOME and on KDE Plasma (Breeze); neither has been rendered.
+- Dark desktops. Under GTK's dark variant the title bar goes dark and the app's own surfaces stay light. The spec is silent; it is Serge's decision whether the app gets a dark palette or says it is light only.
 - The title bars of the dialogs are the desktop's and are not drawn in the test desktop, so they have not been seen with the new dialogs.
 - The motion of the Start button (rise, sink, spring back) has been seen only as still frames. GTK drops style transitions when the desktop turns animations off; that has not been tried either.
