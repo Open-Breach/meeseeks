@@ -4,8 +4,9 @@
  * whichever one the consumer asks for. Its own preference is 1280x720, so a
  * 1920x1080 result can only come from the consumer's request.
  *
- * With PRODUCER_SIZE=<width>x<height> it is like KWin's instead: the monitor
- * has that size before anybody asks, and the stream comes in no other.
+ * With PRODUCER_SIZE=<width>x<height> it is like KWin's before Plasma 6.8
+ * instead: the monitor has that size before anybody asks, and the stream
+ * comes in no other.
  *
  * The picture has a 12 pixel white edge around a gradient with a bar moving
  * across it, so a screenshot shows whether it is drawn unscaled and whether it
@@ -175,7 +176,7 @@ int main(int argc, char *argv[])
 
 	/* Any size the consumer asks for, as Mutter's virtual monitor takes
 	 * it; or, with PRODUCER_SIZE=<width>x<height>, that size and no other,
-	 * as KWin's does, which is made before anybody asks. */
+	 * as KWin's did before Plasma 6.8, which is made before anybody asks. */
 	unsigned int width = 0, height = 0;
 	const char *fixed = getenv("PRODUCER_SIZE");
 	if (fixed != NULL && sscanf(fixed, "%ux%u", &width, &height) != 2) {

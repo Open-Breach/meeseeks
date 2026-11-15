@@ -231,7 +231,7 @@ A neutral, slightly cool light palette with GNOME blue as the only accent, and r
 **Character:** One face, the desktop's own, so the app reads like the desktop it runs on. No font is shipped and no family is named in the style sheet; sizes are percentages of the desktop's text size, so the app follows the user's font setting.
 
 ### Hierarchy
-- **Title 1** (`.mk-title-1`: 800, 160 %): "Choose a size" on the selector ("Virtual monitor" where the desktop decides the size, and the sizes are grey) and the away message "Move this window back to a physical screen." One per page.
+- **Title 1** (`.mk-title-1`: 800, 160 %): "Choose a size" on the selector and the away message "Move this window back to a physical screen." One per page.
 - **Title 2** (`.mk-title-2`: 800, 133 %): the sentence at the top of the startup-checks dialog.
 - **Start word** (`.mk-cap`: 700, 130 %, white, `text-shadow: 0 1px 1.5px alpha(black, 0.32)`): the word on the Start cap only.
 - **Heading** (`.mk-heading`: 700, 100 %): the name of a group of options above its card ("Experimental").

@@ -32,7 +32,7 @@ Out of scope for the prototype:
 | Environment | Status | Path |
 | --- | --- | --- |
 | GNOME (Mutter) | Prototype target | Portal, virtual source type. Monitor size follows the PipeWire format negotiation. |
-| KDE Plasma (KWin), 6.5 or later | Prototype target | Portal, virtual source type; an older Plasma has none. KWin creates the output at a size of its own, 1920×1080 at 1× scale, or from Plasma 6.8 the size picked in the portal's dialog, and the window follows it; the user places it in the layout OSD. |
+| KDE Plasma (KWin), 6.5 or later | Prototype target | Portal, virtual source type; an older Plasma has none. KWin creates the output at 1920×1080 at 1× scale and, from Plasma 6.8, makes it over to the size the stream is asked for, so the monitor has the size chosen in the app, as on GNOME. An older Plasma has a stream of 1920×1080 and no other, and nothing is done for it: another size is not expected to start there. The user places the monitor in the layout OSD. |
 | wlroots (Sway, Hyprland, …) | Later | No virtual source in the portal; create a headless output through the compositor's own command, then capture it as an ordinary monitor. One small backend per compositor. |
 | COSMIC | Later, if ever | Portal has ScreenCast but no virtual source yet; ordinary capture still unreliable. Would become the same portal call once supported. |
 | Cinnamon / X11 | Out | X11; no virtual monitor machinery. |

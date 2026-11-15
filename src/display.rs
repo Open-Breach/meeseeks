@@ -13,6 +13,8 @@ use gtk::gdk::prelude::{PaintableExt, TextureExt, TextureExtManual};
 use gtk::prelude::{GskRendererExt, SnapshotExt};
 use gtk::{gdk, graphene, gsk};
 
+use crate::modifiers;
+
 /// How often the frame rates go to the debug log, in seconds.
 const FRAME_LOG_INTERVAL: u32 = 5;
 
@@ -76,19 +78,20 @@ pub struct Display {
 impl Display {
     /// Starts showing PipeWire node `node_id` of the remote behind `fd`.
     ///
-    /// `size` is the width and height asked of the stream. On GNOME the
-    /// virtual monitor takes whatever size the format negotiation settles
-    /// on, so this is what gives it its size. `None` asks for no size and
-    /// takes the one the stream has: on KDE Plasma the monitor is made
-    /// before the stream is asked for, and a stream of a monitor that is
-    /// there already cannot be had in another size.
+    /// `size` is the width and height asked of the stream, which is what
+    /// gives the virtual monitor its size. On GNOME the monitor takes
+    /// whatever size the format negotiation settles on. KDE Plasma makes
+    /// the monitor before the stream is asked for, at 1920×1080, and from
+    /// 6.8 KWin makes it over to the size of its stream (`followsStreamSize`
+    /// in its `screencaststream.cpp`). A Plasma before that has a stream of
+    /// 1920×1080 and no other to give.
     ///
     /// `on_end` is called once, from the main loop, if the pipeline fails or
     /// the stream ends on its own. Must be called on the GTK main thread.
     pub fn new(
         fd: OwnedFd,
         node_id: u32,
-        size: Option<(i32, i32)>,
+        (width, height): (i32, i32),
         on_end: impl FnOnce() + 'static,
     ) -> Result<Self, Error> {
         gst::init()?;
@@ -107,18 +110,21 @@ impl Display {
         sink.set_property("sync", false);
         let paintable = sink.property::<gdk::Paintable>("paintable");
 
-        // The size, where there is one, is what is asked of the stream. With
-        // any caps features the sink's DMA-BUF caps pass as well as its plain
-        // memory ones; without them the caps mean plain memory only.
-        let mut wanted = gst::Caps::builder("video/x-raw");
-        if let Some((width, height)) = size {
-            wanted = wanted.field("width", width).field("height", height);
-        }
-        let wanted = if tries.copy {
-            wanted.build()
-        } else {
-            wanted.any_features().build()
+        // What is asked of the stream is what the sink takes, less the
+        // DMA-BUF formats that cannot be shown, see `showable`. The sink has
+        // worked out what it takes by now: it does so when its paintable is
+        // made. Caps with no features mean plain memory only.
+        let sink_pad = sink.static_pad("sink");
+        let mut wanted = match &sink_pad {
+            _ if tries.copy => gst::Caps::builder("video/x-raw").build(),
+            Some(pad) => showable(&pad.query_caps(None)),
+            None => gst::Caps::builder("video/x-raw").any_features().build(),
         };
+        // The size is asked for whatever the memory.
+        for structure in wanted.make_mut().iter_mut() {
+            structure.set("width", width);
+            structure.set("height", height);
+        }
         let filter = make("capsfilter")?;
         filter.set_property("caps", &wanted);
 
@@ -136,7 +142,6 @@ impl Display {
         pipeline.add_many([&src, &filter, &sink])?;
         gst::Element::link_many([&src, &filter, &sink])?;
 
-        let sink_pad = sink.static_pad("sink");
         if let Some(pad) = &sink_pad {
             // In this order, so that the log shows what was negotiated.
             let source = src.downgrade();
@@ -261,6 +266,60 @@ fn make(factory: &'static str) -> Result<gst::Element, Error> {
     gst::ElementFactory::make(factory)
         .build()
         .map_err(|_| Error::MissingElement(factory))
+}
+
+/// The caps the sink offers, without the DMA-BUF formats whose modifier gives
+/// a buffer planes of its own. A frame in such a buffer reaches the sink
+/// with those planes missing and GTK cannot draw it, see `src/modifiers.rs`.
+/// Left out here, they are not among what the compositor chooses from.
+fn showable(offered: &gst::Caps) -> gst::Caps {
+    let mut showable = gst::Caps::new_empty();
+    let (mut offered_formats, mut left_out) = (0, 0);
+    {
+        let caps = showable.make_mut();
+        for (structure, features) in offered.iter_with_features() {
+            let mut structure = structure.to_owned();
+            if let Ok(list) = structure.get::<gst::List>("drm-format") {
+                let formats: Vec<&str> = list
+                    .iter()
+                    .filter_map(|format| format.get::<&str>().ok())
+                    .collect();
+                let kept: Vec<&str> = formats
+                    .iter()
+                    .copied()
+                    .filter(|format| !has_planes_of_its_own(format))
+                    .collect();
+                offered_formats += formats.len();
+                left_out += formats.len() - kept.len();
+                if kept.is_empty() {
+                    continue;
+                }
+                structure.set("drm-format", gst::List::new(kept));
+            }
+            caps.append_structure_full(structure, Some(features.to_owned()));
+        }
+    }
+    if left_out > 0 {
+        log::info!(
+            "{left_out} of the sink's {offered_formats} DMA-BUF formats are not asked for: \
+             their modifiers give a buffer planes that would not reach the sink"
+        );
+    }
+    showable
+}
+
+/// Whether one entry of a `drm-format` list is of buffers with planes of
+/// their own. An entry is a fourcc and, after a colon, the modifier in
+/// hexadecimal: `AR24:0x010000000000000f`. One with no modifier is of linear
+/// buffers, which have none; neither has one that cannot be read.
+fn has_planes_of_its_own(drm_format: &str) -> bool {
+    drm_format
+        .split_once(':')
+        .and_then(|(_, modifier)| {
+            let digits = modifier.strip_prefix("0x").unwrap_or(modifier);
+            u64::from_str_radix(digits, 16).ok()
+        })
+        .is_some_and(modifiers::has_planes_of_its_own)
 }
 
 /// Runs each time caps reach the sink: once per start, and again if the
@@ -431,5 +490,58 @@ impl From<glib::BoolError> for Error {
 impl From<gst::StateChangeError> for Error {
     fn from(err: gst::StateChangeError) -> Self {
         Self::Gst(err.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    fn caps(caps: &str) -> gst::Caps {
+        gst::init().unwrap();
+        gst::Caps::from_str(caps).unwrap()
+    }
+
+    #[test]
+    fn a_format_is_told_by_its_modifier() {
+        assert!(has_planes_of_its_own("AR24:0x010000000000000f"));
+        assert!(!has_planes_of_its_own("AR24:0x0100000000000009"));
+        assert!(!has_planes_of_its_own("AR24"));
+        assert!(!has_planes_of_its_own("AR24:compressed"));
+    }
+
+    #[test]
+    fn formats_with_planes_of_their_own_are_not_asked_for() {
+        let offered = caps(
+            "video/x-raw(memory:DMABuf), format=DMA_DRM, drm-format={ AR24, \
+             AR24:0x0100000000000009, AR24:0x010000000000000d, AR24:0x010000000000000f, \
+             XR24:0x0100000000000009, XR24:0x010000000000000f }; \
+             video/x-raw, format={ BGRA, RGBA }",
+        );
+        let wanted = caps(
+            "video/x-raw(memory:DMABuf), format=DMA_DRM, drm-format={ AR24, \
+             AR24:0x0100000000000009, XR24:0x0100000000000009 }; \
+             video/x-raw, format={ BGRA, RGBA }",
+        );
+        assert!(showable(&offered).is_strictly_equal(&wanted));
+    }
+
+    #[test]
+    fn nothing_is_left_of_dma_bufs_that_all_have_planes_of_their_own() {
+        let offered = caps(
+            "video/x-raw(memory:DMABuf), format=DMA_DRM, \
+             drm-format={ AR24:0x010000000000000d, AR24:0x010000000000000f }; \
+             video/x-raw, format=BGRA",
+        );
+        let wanted = caps("video/x-raw, format=BGRA");
+        assert!(showable(&offered).is_strictly_equal(&wanted));
+    }
+
+    #[test]
+    fn caps_with_no_dma_bufs_stay_as_they_are() {
+        let offered = caps("video/x-raw, format={ BGRA, RGBA }");
+        assert!(showable(&offered).is_strictly_equal(&offered));
     }
 }

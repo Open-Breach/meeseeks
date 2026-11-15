@@ -15,10 +15,11 @@ A Linux app that creates a virtual monitor through the XDG ScreenCast portal and
 
 ## Layout
 
-- `src/session.rs` — the portal session: ScreenCast, source type Virtual, cursor mode Embedded, returns the PipeWire fd and node id, and the monitor's size where the portal gives one. On GNOME, and on KDE Plasma where `src/plasma.rs` allows, it is a RemoteDesktop session with that screen cast in it, which also grants the pointer if the user allows it; one dialog either way, and never a second session after it. No GTK or GStreamer imports.
+- `src/session.rs` — the portal session: ScreenCast, source type Virtual, cursor mode Embedded, returns the PipeWire fd and node id. On GNOME, and on KDE Plasma where `src/plasma.rs` allows, it is a RemoteDesktop session with that screen cast in it, which also grants the pointer if the user allows it; one dialog either way, and never a second session after it. No GTK or GStreamer imports.
 - `src/display.rs` — the GStreamer pipeline and the paintable it exposes; hands out the current frame as a texture. Registers the linked-in sink with GStreamer at startup. No portal imports, and nothing of files or folders.
+- `src/modifiers.rs` — which DRM format modifiers give a buffer planes of its own, as the compressed ones of Intel and AMD cards do. `pipewiresrc` cannot pass such a buffer on whole, so the display asks for no DMA-BUF format that has one. No GTK or GStreamer imports.
 - `src/main.rs` — one GTK 4 window: the resolution selector while idle, the picture with a Stop button and the screenshot button in the title bar while running. Sets the application id, `meeseeks`, and runs the startup checks first.
-- `src/selector.rs` — the resolution selector: presets, custom size, fit check, Start button, and a notice under it. Where the desktop decides the monitor's size it shows the size and lets none be chosen.
+- `src/selector.rs` — the resolution selector: presets, custom size, fit check, Start button, and a notice under it. The same on every desktop: the stream is asked for the chosen size, and the monitor takes it.
 - `src/style.rs` — the app's GTK style sheet: the colours, the lists on white cards, the linked presets, the raised Start button. It styles only widgets marked with the app's own `mk-` classes; title bars stay the desktop theme's.
 - `src/pictograms.rs` — the pictograms the app draws itself: the marks of the startup checks, the warning sign, the move-back sign, the screenshot button's camera.
 - `src/screenshot.rs` — the screenshot button and the file it saves: a PNG in `Meeseeks` in the user's Pictures folder, named after the date and time. No pipeline or portal imports.
@@ -30,7 +31,7 @@ A Linux app that creates a virtual monitor through the XDG ScreenCast portal and
 - `src/renderer.rs` — which GTK renderer is asked for, through GTK's environment variables.
 - `src/input.rs` — the teleporter: a left click on the picture sends the pointer to that spot of the virtual monitor. Nothing else is passed on. No portal imports.
 - `src/pointer.rs` — the pointer a RemoteDesktop session grants. It is sent positions only, over libei (`ConnectToEIS`, the `reis` crate) or, where the portal gave a size for the stream, with the portal's own call. No GTK imports.
-- `src/desktop.rs` — which desktop this is, from `XDG_CURRENT_DESKTOP`, whether the teleporter is asked for on it, and whether it decides the monitor's size itself. No GTK or portal imports.
+- `src/desktop.rs` — which desktop this is, from `XDG_CURRENT_DESKTOP`, and whether the teleporter is asked for on it. No GTK or portal imports.
 - `src/plasma.rs` — whether a KDE Plasma is asked for remote control: only where its portal backend has the mark of 6.6 or later, and the option is on. No GTK imports.
 - `.github/workflows/release.yml` — the one workflow: a tag `vX.Y.Z` on `main` builds the tarball on Ubuntu 24.04 and publishes the release. `.github/scripts/check-release.sh` stops a tag that does not match `Cargo.toml` and the README; `.github/scripts/tarball.sh` packs the tarball.
 - `packaging/meeseeks.desktop` — the desktop entry in the tarball. `about.toml`, `about.hbs` — the tarball's list of third-party licences, made with cargo-about.

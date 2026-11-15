@@ -18,20 +18,6 @@ impl Desktop {
     pub fn has_teleporter(self) -> bool {
         matches!(self, Self::Gnome | Self::Kde)
     }
-
-    /// Whether this desktop, and not the app, decides how large the virtual
-    /// monitor is.
-    ///
-    /// The portal has no way to ask for a size. GNOME gives the monitor the
-    /// size the stream is asked for. KDE Plasma makes the monitor before
-    /// there is a stream: 1920×1080 up to 6.7, and from 6.8 the size the
-    /// user picks in Plasma's own dialog, or 1920×1080 again in a
-    /// RemoteDesktop session (xdg-desktop-portal-kde, `startStreamingVirtual`
-    /// in `screencast.cpp` and `remotedesktop.cpp`, and 5900c11d). Its
-    /// stream comes in that size and no other.
-    pub fn decides_size(self) -> bool {
-        self == Self::Kde
-    }
 }
 
 /// The desktop, and its name as the variable has it; empty if it is not set.

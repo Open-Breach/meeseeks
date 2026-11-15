@@ -34,11 +34,6 @@ pub struct Stream {
     pub fd: OwnedFd,
     /// The stream's node on that remote.
     pub node_id: u32,
-    /// How large the monitor is, where the portal says. KDE Plasma's does:
-    /// there the desktop has made the monitor by now, at a size of its own
-    /// choosing, and the stream comes in no other. GNOME's says nothing for
-    /// a virtual monitor, which takes the size the stream is asked for.
-    pub size: Option<(i32, i32)>,
 }
 
 /// An open portal session. The virtual monitor exists for as long as the
@@ -260,7 +255,7 @@ async fn start_stream(
         .open_pipe_wire_remote(session, Default::default())
         .await?;
 
-    Ok(Stream { fd, node_id, size })
+    Ok(Stream { fd, node_id })
 }
 
 /// Starts the prepared RemoteDesktop session. Hands back, with the stream,
@@ -314,7 +309,7 @@ async fn start_remote_stream(
         size,
         mapping_id,
     });
-    Ok((Stream { fd, node_id, size }, monitor))
+    Ok((Stream { fd, node_id }, monitor))
 }
 
 #[derive(Debug)]

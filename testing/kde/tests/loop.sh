@@ -3,9 +3,9 @@
 # dialog, stop, start again, close the window while running.
 # Usage: loop.sh [<width> <height> [off]]
 #
-# The size is the one chosen in the app. Plasma makes the monitor at a size
-# of its own, 1920x1080 up to 6.7, and the window follows: look for `the
-# desktop made the monitor` in the log where another size was chosen.
+# The size is the one chosen in the app, and the stream is asked for it.
+# From 6.8 KWin makes the monitor that size. Up to 6.7 its stream comes at
+# 1920x1080 and no other, so another size is not expected to start there.
 #
 # `off` has "Ask for remote control" off in the settings. Without it the app
 # asks a Plasma of 6.6 or later for remote control, and the dialog is
