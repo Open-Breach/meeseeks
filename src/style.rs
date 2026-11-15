@@ -76,7 +76,7 @@ const CSS: &str = r#"
 .mk-segment:disabled { background-color: @mk_control_bg; color: @mk_disabled; }
 /* The chosen preset stays the chosen one while everything waits. */
 .mk-segment:checked:disabled { background-color: @mk_accent; color: white; }
-.mk-segment:focus-visible { outline: 2px solid alpha(@mk_accent, 0.7); }
+.mk-segment:focus-visible { outline: 2px solid @mk_accent; }
 .mk-segment:checked:focus-visible { outline-color: white; }
 
 /* The two fields of the custom size. */
@@ -89,7 +89,7 @@ const CSS: &str = r#"
   outline: 0 solid transparent;
   outline-offset: -1px;
 }
-.mk-spin:focus-within { outline: 2px solid alpha(@mk_accent, 0.7); }
+.mk-spin:focus-within { outline: 2px solid @mk_accent; }
 .mk-spin > button {
   margin: 0;
   min-width: 34px;
@@ -108,9 +108,10 @@ const CSS: &str = r#"
 
 .mk-sizes:disabled { opacity: 0.5; }
 
-/* The Start button: a glossy cap standing proud of a dark collar. The cap's
-   side wall is the hard-edged shadow under it, so that the wall's foot stays
-   where it is while the cap moves. */
+/* The Start button: a glossy cap standing proud of a dark collar. The button
+   itself is only the place to press and stays where it is; the cap inside it
+   is what moves. The cap's side wall is the hard-edged shadow under it, so
+   that the wall's foot stays put while the cap rises and sinks. */
 .mk-collar {
   border-radius: 9999px;
   background-image: linear-gradient(#434C5C, #252C37);
@@ -119,7 +120,7 @@ const CSS: &str = r#"
               0 8px 16px alpha(black, 0.28);
 }
 .mk-collar.mk-focus {
-  box-shadow: 0 0 0 4px alpha(@mk_accent, 0.5),
+  box-shadow: 0 0 0 4px @mk_accent,
               0 2px 3px alpha(black, 0.22),
               0 8px 16px alpha(black, 0.28);
 }
@@ -130,13 +131,19 @@ const CSS: &str = r#"
   border: none;
   border-radius: 9999px;
   outline: none;
+  box-shadow: none;
+  background-image: none;
+  background-color: transparent;
+}
+.mk-cap {
+  border-radius: 9999px;
   color: white;
   font-size: 120%;
   font-weight: 700;
   text-shadow: 0 1px 1.5px alpha(black, 0.32);
   background-color: @mk_accent;
   background-image:
-    radial-gradient(ellipse 29px 13px at 50% 19px, alpha(white, 0.42), alpha(white, 0)),
+    radial-gradient(ellipse 29px 12px at 50% 19px, alpha(white, 0.5), alpha(white, 0.3) 78%, alpha(white, 0)),
     radial-gradient(circle 79px at 38% 26%, #6AB3F8, #1C71D8 60%, #1860BC);
   box-shadow: inset 0 2px 1.5px alpha(white, 0.55),
               inset 0 -4px 9px alpha(black, 0.24),
@@ -145,7 +152,7 @@ const CSS: &str = r#"
               box-shadow 160ms cubic-bezier(0.3, 1.5, 0.5, 1),
               filter 160ms ease-out;
 }
-.mk-start:hover {
+.mk-start:hover > .mk-cap {
   transform: translateY(-3px);
   filter: brightness(1.1);
   box-shadow: inset 0 2px 1.5px alpha(white, 0.6),
@@ -154,8 +161,8 @@ const CSS: &str = r#"
   transition-duration: 120ms;
   transition-timing-function: ease-out;
 }
-.mk-start:active,
-.mk-start:disabled {
+.mk-start:active > .mk-cap,
+.mk-start:disabled > .mk-cap {
   transform: translateY(6px);
   box-shadow: inset 0 3px 7px alpha(black, 0.34),
               inset 0 -2px 5px alpha(black, 0.14),
@@ -163,8 +170,19 @@ const CSS: &str = r#"
   transition-duration: 80ms;
   transition-timing-function: ease-out;
 }
-.mk-start:active { filter: brightness(0.9); }
-.mk-start:disabled { filter: saturate(0.5) brightness(1.32); color: alpha(white, 0.92); }
+.mk-start:active > .mk-cap { filter: brightness(0.9); }
+/* Held down while the desktop is asked: flat and pale, no longer lit. */
+.mk-start:disabled > .mk-cap {
+  filter: none;
+  color: alpha(white, 0.92);
+  background-color: #8DB6EB;
+  background-image:
+    radial-gradient(ellipse 29px 12px at 50% 19px, alpha(white, 0.16), alpha(white, 0)),
+    radial-gradient(circle 79px at 38% 26%, #B4D2F5, #8DB6EB 60%, #7BA3D9);
+  box-shadow: inset 0 3px 7px alpha(black, 0.2),
+              inset 0 -2px 5px alpha(black, 0.08),
+              0 2px 0 #6E8FBC;
+}
 
 /* The buttons at the foot of a dialog. */
 .mk-button {
@@ -181,7 +199,7 @@ const CSS: &str = r#"
 }
 .mk-button:hover { background-color: @mk_control_hover; }
 .mk-button:active { background-color: @mk_control_active; }
-.mk-button:focus-visible { outline: 2px solid alpha(@mk_accent, 0.7); outline-offset: 2px; }
+.mk-button:focus-visible { outline: 2px solid @mk_accent; outline-offset: 2px; }
 .mk-button.mk-suggested {
   border-color: @mk_accent;
   background-color: @mk_accent;
@@ -204,7 +222,7 @@ const CSS: &str = r#"
   outline-offset: 2px;
 }
 .mk-dialog switch:checked { background-color: @mk_accent; }
-.mk-dialog switch:focus-visible { outline: 2px solid alpha(@mk_accent, 0.7); }
+.mk-dialog switch:focus-visible { outline: 2px solid @mk_accent; }
 .mk-dialog switch > slider {
   min-width: 22px;
   min-height: 22px;
@@ -228,7 +246,7 @@ const CSS: &str = r#"
   font-weight: 500;
 }
 .mk-dialog dropdown > button:hover { background-color: @mk_control_hover; }
-.mk-dialog dropdown > button:focus-visible { outline: 2px solid alpha(@mk_accent, 0.7); outline-offset: 2px; }
+.mk-dialog dropdown > button:focus-visible { outline: 2px solid @mk_accent; outline-offset: 2px; }
 
 /* The question GTK asks before the restart: the answer that goes ahead. */
 window.dialog.message button.default { color: @mk_accent; font-weight: 600; }

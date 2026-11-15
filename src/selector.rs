@@ -159,16 +159,28 @@ impl Selector {
         sizes.append(&list);
         sizes.append(&legend);
 
-        // The cap stands 8 pixels proud of the collar it sits in: the room
-        // under it is its side wall, which the style sheet draws.
+        // The button is the place to press and never moves; the cap in it is
+        // what is seen, and what the style sheet lifts and sinks. Were the
+        // button itself to move, it would slip from under the pointer at its
+        // edges. The cap stands 8 pixels proud of the collar it sits in: the
+        // room under it is its side wall, which the style sheet draws.
+        let cap = gtk::Box::builder().css_classes(["mk-cap"]).build();
+        cap.append(
+            &gtk::Label::builder()
+                .label("Start")
+                .hexpand(true)
+                .halign(gtk::Align::Center)
+                .build(),
+        );
         let start = gtk::Button::builder()
-            .label("Start")
+            .child(&cap)
             .css_classes(["mk-start"])
             .margin_start(10)
             .margin_end(10)
             .margin_top(2)
             .margin_bottom(18)
             .build();
+        start.update_property(&[gtk::accessible::Property::Label("Start")]);
         let collar = gtk::Box::builder()
             .css_classes(["mk-collar"])
             .halign(gtk::Align::Center)
