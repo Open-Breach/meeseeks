@@ -16,5 +16,9 @@ gst = { package = "gstreamer", version = "0.25" }
 # arrived in GTK 4.14.
 gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
 log = "0.4"
+# libei, for the input experiment in src/pointer.rs, and the clock its events
+# are stamped with.
+reis = "0.7"
+rustix = { version = "1", features = ["time"] }
 serde = { version = "1", features = ["derive"] }
 toml = "1"

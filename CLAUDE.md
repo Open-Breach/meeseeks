@@ -25,6 +25,7 @@ A Linux app that creates a virtual monitor through the XDG ScreenCast portal and
 - `src/checks.rs` — the startup checks, one small function each. `src/checks_dialog.rs` — the dialog that lists them when one fails.
 - `src/renderer.rs` — which GTK renderer is asked for, through GTK's environment variables.
 - `src/input.rs` — experiment, off unless `MEESEEKS_INPUT` is `teleport` or `forward`: passes the pointer over the picture on to the virtual monitor through the RemoteDesktop session. No portal imports.
+- `src/pointer.rs` — the experiment's pointer: moves the desktop's cursor with the portal's Notify calls or, where those cannot work, over libei (`ConnectToEIS`, the `reis` crate). No GTK imports.
 
 ## Rules
 

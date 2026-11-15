@@ -10,6 +10,7 @@ mod environment;
 mod input;
 mod mirror;
 mod options;
+mod pointer;
 mod renderer;
 mod selector;
 mod session;
@@ -168,12 +169,14 @@ impl Shell {
         let Some(Running {
             session,
             display,
-            input,
+            mut input,
         }) = self.running.take()
         else {
             return;
         };
-        drop(input);
+        if let Some(input) = &mut input {
+            input.detach();
+        }
         self.stop.set_visible(false);
         self.selector.set_busy(true);
         self.picture.set_paintable(gdk::Paintable::NONE);
@@ -189,6 +192,8 @@ impl Shell {
             if let Err(err) = session.close().await {
                 log::warn!("could not close the session: {err}");
             }
+            // Its connection to the desktop goes after the session.
+            drop(input);
             shell.selector.set_busy(false);
             shell.selector.focus_start();
             drop(hold);

@@ -1,13 +1,13 @@
 //! Experiment: working on the virtual monitor with the mouse, through the
 //! window. Off unless `MEESEEKS_INPUT` names a variant. Then the session is a
 //! RemoteDesktop one, see `src/session.rs`, and this module puts the pointer
-//! that comes with it to use. It is here to find out how that feels, and goes
-//! again if it does not feel good.
+//! that comes with it, see `src/pointer.rs`, to use. It is here to find out
+//! how that feels, and goes again if it does not feel good.
 //!
-//! The portal has no pointer of its own to offer: what it moves is the
-//! desktop's one cursor. A position sent to it takes the real cursor off this
-//! window and puts it on the virtual monitor, where the window hears no more
-//! of it. The two variants differ in what they make of that.
+//! The desktop has no pointer of its own to offer: what gets moved is its
+//! one cursor. A position sent to it takes the real cursor off this window
+//! and puts it on the virtual monitor, where the window hears no more of it.
+//! The two variants differ in what they make of that.
 //!
 //! - `teleport` counts on it. When the pointer moves onto the picture it is
 //!   sent, once, to the matching spot on the monitor. From there the user
@@ -19,15 +19,16 @@
 //!
 //! A button or a scroll has no position of its own: the desktop applies it
 //! where its cursor is. As long as the window gets them, the cursor is on the
-//! window, so one that is passed on comes straight back to it. `forward`
-//! therefore passes them on only after a position the portal took, and takes
-//! what arrives right after one it passed on to be that one coming back. A
-//! portal that refuses a position is sent no more of them while the pointer
-//! stays.
+//! window, so one that is passed on comes straight back to it, and passing
+//! that one on again would go round for ever. `forward` therefore passes
+//! them on only after a position the desktop took, and only one press and
+//! one scroll for each spot the pointer is at: one that comes back finds the
+//! pointer where it was. Once a position has been refused, no more are sent
+//! while the pointer stays.
 //!
 //! Each stay of the pointer over the picture is one line in the log, with
-//! what was passed on and how long the portal took. The keyboard is left
-//! alone, and nothing brings the pointer back from the monitor.
+//! what was passed on and how long that took. The keyboard is left alone,
+//! and nothing brings the pointer back from the monitor.
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
@@ -35,20 +36,15 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gtk::prelude::*;
-use gtk::{gdk, glib};
+use gtk::{gdk, gio, glib};
 
-use crate::session::{self, Pointer};
+use crate::pointer::{self, Pointer};
 
 /// The variable that switches the experiment on by naming a variant.
 const VARIABLE: &str = "MEESEEKS_INPUT";
 
 /// The evdev code of the left button; the right and the middle one follow.
 const BTN_LEFT: i32 = 0x110;
-
-/// For how long after a button or a scroll has been passed on one that
-/// arrives is taken to be the same one coming back. Longer than the desktop
-/// takes to bring it round, shorter than a hand takes to click again.
-const ECHO: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Variant {
@@ -86,9 +82,16 @@ impl Variant {
 
 /// The experiment at work on one picture. Dropping it takes it off the
 /// picture again and lets go of any button it holds down.
+///
+/// The pointer's connection lasts until the drop. It is the desktop's to
+/// close, with the session: a desktop that finds it closed first while it
+/// takes the monitor down complains in its log. So to stop, [`Input::detach`]
+/// first, close the session, and drop this last.
 pub struct Input {
     picture: gtk::Picture,
     controllers: Vec<gtk::EventController>,
+    /// The watch on the pointer's socket, if it has one.
+    watch: Option<glib::Source>,
     relay: Rc<Relay>,
 }
 
@@ -105,10 +108,14 @@ impl Input {
             visit: RefCell::default(),
             placed: Cell::new(false),
             held: RefCell::default(),
-            passed_at: Cell::new(None),
+            spot: Cell::new(0),
+            last_at: Cell::new(None),
+            pressed_at: Cell::new(None),
+            scrolled_at: Cell::new(None),
+            swiping: Cell::new(false),
             wheel: Cell::default(),
             complained: Cell::new(false),
-            size_checked: Cell::new(false),
+            cautioned: Cell::new(false),
         });
         // The handlers hold the relay weakly: the picture keeps them, and the
         // relay keeps the picture.
@@ -172,28 +179,71 @@ impl Input {
         for controller in &controllers {
             picture.add_controller(controller.clone());
         }
+
+        // What the desktop says on the pointer's socket has to be taken in
+        // for the pointer to work, and for the socket not to fill up.
+        let watch = relay
+            .pointer
+            .watch()
+            .and_then(|fd| {
+                gio::Socket::from_fd(fd)
+                    .inspect_err(|err| log::warn!("the pointer's socket cannot be watched: {err}"))
+                    .ok()
+            })
+            .map(|socket| {
+                let relay_weak = weak();
+                let source = gio::prelude::SocketExtManual::create_source(
+                    &socket,
+                    glib::IOCondition::IN,
+                    gio::Cancellable::NONE,
+                    None,
+                    glib::Priority::DEFAULT,
+                    move |_, _| match relay_weak.upgrade() {
+                        Some(relay) if relay.pointer.dispatch() => glib::ControlFlow::Continue,
+                        _ => glib::ControlFlow::Break,
+                    },
+                );
+                source.attach(None);
+                source
+            });
         Self {
             picture: picture.clone(),
             controllers,
+            watch,
             relay,
+        }
+    }
+}
+
+impl Input {
+    /// Takes the experiment off the picture and stops listening to the
+    /// desktop. Nothing is passed on from here on.
+    pub fn detach(&mut self) {
+        for controller in self.controllers.drain(..) {
+            self.picture.remove_controller(&controller);
+        }
+        self.relay.left();
+        if let Some(watch) = self.watch.take() {
+            watch.destroy();
         }
     }
 }
 
 impl Drop for Input {
     fn drop(&mut self) {
-        for controller in &self.controllers {
-            self.picture.remove_controller(controller);
-        }
-        self.relay.left();
+        self.detach();
     }
 }
 
 /// Something to tell the portal.
 #[derive(Clone, Copy, Debug)]
 enum Event {
-    /// The pointer is at this spot of the monitor.
-    Position { x: f64, y: f64 },
+    /// The pointer is at this spot of the monitor: how far along it, from 0
+    /// to 1 each way, and the size of the monitor's frames.
+    Position {
+        along: (f64, f64),
+        frame: (f64, f64),
+    },
     /// A button, by its evdev code.
     Button { code: i32, pressed: bool },
     /// A smooth scroll, as of a touchpad.
@@ -202,6 +252,16 @@ enum Event {
     Steps { horizontal: i32, vertical: i32 },
     /// The pointer has left the picture: every button that is down goes up.
     LetGo,
+}
+
+/// Something that waits to be passed on.
+#[derive(Clone, Copy)]
+struct Queued {
+    event: Event,
+    /// When the window got it.
+    since: Instant,
+    /// The spot the pointer was at then, by its number.
+    spot: u64,
 }
 
 /// One stay of the pointer over the picture, for the log.
@@ -217,16 +277,17 @@ struct Visit {
     positions: u32,
     buttons: u32,
     scrolls: u32,
-    /// What became of it: the calls the portal has answered, how many of
-    /// those it refused, and how long it took, counted from the event.
+    /// What became of it: the events the desktop has taken or refused, how
+    /// many of those it refused, and how long that took, counted from the
+    /// event.
     answered: u32,
     refused: u32,
     waited: Duration,
     slowest: Duration,
-    /// The buttons and scrolls the portal was not told of.
+    /// The buttons and scrolls the desktop was not told of.
     held_back: u32,
-    /// Whether the portal has refused a position. It is sent no more of them
-    /// for the rest of the stay then; it would refuse those as well.
+    /// Whether a position has been refused. No more are sent for the rest of
+    /// the stay then; they would be refused as well.
     turned_down: bool,
 }
 
@@ -236,55 +297,68 @@ struct Relay {
     variant: Variant,
     picture: gtk::Picture,
     pointer: Pointer,
-    /// What the portal has yet to be told, oldest first, each with the time
+    /// What the desktop has yet to be told, oldest first, each with the time
     /// of the event behind it.
-    queue: RefCell<VecDeque<(Event, Instant)>>,
+    queue: RefCell<VecDeque<Queued>>,
     /// Whether the queue is being worked off.
     pumping: Cell<bool>,
     /// The pointer's stay over the picture: the one going on, or the last
     /// one until it has been logged.
     visit: RefCell<Option<Visit>>,
-    /// Whether the portal took the last position it was sent.
+    /// Whether the desktop took the last position it was sent.
     placed: Cell<bool>,
-    /// The buttons the portal has been told are down.
+    /// The buttons the desktop has been told are down.
     held: RefCell<Vec<i32>>,
-    /// When a button press or a scroll was last passed on.
-    passed_at: Cell<Option<Instant>>,
+    /// Counts the spots of the picture the pointer has been at, so that each
+    /// has a number.
+    spot: Cell<u64>,
+    /// Where on the picture widget the pointer last was.
+    last_at: Cell<Option<(f64, f64)>>,
+    /// The spots at which a button press and a scroll were last passed on.
+    pressed_at: Cell<Option<u64>>,
+    scrolled_at: Cell<Option<u64>>,
+    /// Whether a smooth scroll has been passed on that has not ended yet.
+    swiping: Cell<bool>,
     /// The parts of a wheel click that have not made a whole one yet.
     wheel: Cell<(f64, f64)>,
     /// Whether a refusal has been logged as a warning already.
     complained: Cell<bool>,
-    /// Whether the size the portal gave has been held against the frames.
-    size_checked: Cell<bool>,
+    /// Whether the pointer has been asked what stands in its way.
+    cautioned: Cell<bool>,
 }
 
 impl Relay {
     /// The pointer is at `(x, y)` of the picture widget.
     fn at(self: &Rc<Self>, x: f64, y: f64) {
-        let Some(spot) = self.spot(x, y) else {
+        let Some((along, frame)) = self.spot(x, y) else {
             // On the widget, but beside the picture drawn in it.
             self.left();
             return;
         };
+        if self.last_at.replace(Some((x, y))) != Some((x, y)) {
+            self.spot.set(self.spot.get() + 1);
+        }
         let arrived = !self.over();
         if arrived {
-            if let Some((widget, frame)) = self.sizes() {
-                log::debug!(
-                    "the pointer has come onto the picture: frames of {}×{} drawn in a widget \
-                     of {}×{}",
-                    frame.0,
-                    frame.1,
-                    widget.0,
-                    widget.1
-                );
-                self.check_size(frame);
+            log::debug!(
+                "the pointer has come onto the picture at {x},{y}: frames of {}×{} drawn in a \
+                 widget of {}×{}",
+                frame.0,
+                frame.1,
+                self.picture.width(),
+                self.picture.height()
+            );
+            if !self.cautioned.replace(true)
+                && let Some(caveat) = self.pointer.caveat(frame)
+            {
+                log::warn!("{caveat}");
             }
-            // The stay before this one may still be waiting for the portal.
+            // The stay before this one may still be waiting to be passed on.
             self.report();
             self.visit.replace(Some(Visit {
                 since: Instant::now(),
                 lasted: None,
-                began_at: ((x, y), spot),
+                began_at: ((x, y), (along.0 * frame.0, along.1 * frame.1)),
                 positions: 0,
                 buttons: 0,
                 scrolls: 0,
@@ -308,10 +382,7 @@ impl Relay {
         // that, the desktop did not take it, and asking again for every move
         // would not help.
         if arrived || (self.variant == Variant::Forward && !turned_down) {
-            self.send(Event::Position {
-                x: spot.0,
-                y: spot.1,
-            });
+            self.send(Event::Position { along, frame });
         }
     }
 
@@ -325,6 +396,7 @@ impl Relay {
             self.send(Event::LetGo);
         }
         self.wheel.take();
+        self.last_at.take();
         if let Some(visit) = self.visit.borrow_mut().as_mut() {
             visit.lasted = Some(visit.since.elapsed());
         }
@@ -398,21 +470,14 @@ impl Relay {
     }
 
     /// Where on the monitor the spot `(x, y)` of the picture widget is, if
-    /// the picture is drawn there. There is no telling before the first
-    /// frame has arrived.
-    ///
-    /// The spot is counted in the frame's pixels from the monitor's top left
-    /// corner. By their source, that is how GNOME and KDE count on a monitor
-    /// that is not scaled, and a virtual one is not unless it has been set
-    /// otherwise.
-    fn spot(&self, x: f64, y: f64) -> Option<(f64, f64)> {
-        let (widget, frame) = self.sizes()?;
-        to_monitor(widget, frame, (x, y))
-    }
-
-    /// The sizes of the picture widget and of the frames drawn in it, each
-    /// as width and height.
-    fn sizes(&self) -> Option<((f64, f64), (f64, f64))> {
+    /// the picture is drawn there: how far along the monitor, from 0 to 1
+    /// each way, and the size of the monitor's frames. There is no telling
+    /// before the first frame has arrived, nor before the pointer can be
+    /// moved.
+    fn spot(&self, x: f64, y: f64) -> Option<((f64, f64), (f64, f64))> {
+        if !self.pointer.ready() {
+            return None;
+        }
         let paintable = self.picture.paintable()?;
         let frame = (
             f64::from(paintable.intrinsic_width()),
@@ -422,46 +487,26 @@ impl Relay {
             f64::from(self.picture.width()),
             f64::from(self.picture.height()),
         );
-        Some((widget, frame))
+        Some((along(widget, frame, (x, y))?, frame))
     }
 
-    /// Says once, now that the size of the frames is known, if the portal is
-    /// likely to refuse positions. xdg-desktop-portal lets a position through
-    /// only if it lies inside the size it was given for the stream when the
-    /// session started, and takes a size it was not given to be nothing. By
-    /// its source, GNOME's portal gives none for a virtual monitor.
-    fn check_size(&self, frame: (f64, f64)) {
-        if self.size_checked.replace(true) {
-            return;
-        }
-        match self.pointer.reported_size() {
-            None => log::warn!(
-                "the portal gave no size for the monitor's stream. It checks positions against \
-                 that size, so it is likely to refuse every one sent to it"
-            ),
-            Some((width, height)) if (f64::from(width), f64::from(height)) != frame => log::warn!(
-                "the portal gave {width}×{height} for the monitor's stream, but its frames are \
-                 {}×{}. It checks positions against the first, so it is likely to refuse those \
-                 outside it",
-                frame.0,
-                frame.1
-            ),
-            Some(_) => {}
-        }
-    }
-
-    /// Queues `event` for the portal and sees to it that the queue is being
-    /// worked off. The calls go out one after the other, each once the one
-    /// before has been answered, so they arrive in order.
+    /// Queues `event` for the desktop and sees to it that the queue is being
+    /// worked off. The events go out one after the other, each once the one
+    /// before has been taken or refused, so they arrive in order.
     fn send(self: &Rc<Self>, event: Event) {
-        let entry = (event, Instant::now());
+        let entry = Queued {
+            event,
+            since: Instant::now(),
+            spot: self.spot.get(),
+        };
         {
             let mut queue = self.queue.borrow_mut();
             match queue.back_mut() {
-                // The portal has not been told of that position yet, and
+                // The desktop has not been told of that position yet, and
                 // only the newest matters to it.
-                Some(waiting @ (Event::Position { .. }, _))
-                    if matches!(event, Event::Position { .. }) =>
+                Some(waiting)
+                    if matches!(waiting.event, Event::Position { .. })
+                        && matches!(event, Event::Position { .. }) =>
                 {
                     *waiting = entry;
                 }
@@ -475,10 +520,10 @@ impl Relay {
         glib::spawn_future_local(async move {
             loop {
                 let next = relay.queue.borrow_mut().pop_front();
-                let Some((event, since)) = next else {
+                let Some(next) = next else {
                     break;
                 };
-                relay.pass_on(event, since).await;
+                relay.pass_on(next).await;
             }
             relay.pumping.set(false);
             if !relay.over() {
@@ -487,16 +532,16 @@ impl Relay {
         });
     }
 
-    /// Tells the portal of `event`, which the window got at `since`, unless
-    /// it is a button or a scroll that has to be held back.
-    async fn pass_on(&self, event: Event, since: Instant) {
-        if let Err(why) = self.may_pass(event, since) {
+    /// Tells the desktop of an event the window got, unless it is a button
+    /// or a scroll that has to be held back.
+    async fn pass_on(&self, Queued { event, since, spot }: Queued) {
+        if let Err(why) = self.may_pass(event, spot) {
             return self.hold_back(event, why);
         }
         let pointer = &self.pointer;
         let result = match event {
-            Event::Position { x, y } => {
-                let result = pointer.move_to(x, y).await;
+            Event::Position { along, frame } => {
+                let result = pointer.move_to(along, frame).await;
                 self.placed.set(result.is_ok());
                 result
             }
@@ -521,15 +566,18 @@ impl Relay {
         self.answered(event, since.elapsed(), result);
     }
 
-    /// Whether the portal is to be told of `event`, which the window got at
-    /// `since`, and if not, why not. Keeps track of the buttons that are
-    /// down.
-    fn may_pass(&self, event: Event, since: Instant) -> Result<(), &'static str> {
+    /// Whether the desktop is to be told of `event`, which the window got
+    /// while the pointer was at `spot`, and if not, why not. Keeps track of
+    /// the buttons that are down.
+    fn may_pass(&self, event: Event, spot: u64) -> Result<(), &'static str> {
+        // Without the position, a press or a scroll would act where the
+        // cursor is: on this window.
+        const NOT_PLACED: &str = "the desktop did not take the position before it";
         match event {
             Event::Position { .. } | Event::LetGo => Ok(()),
-            // A button the portal knows down always goes up again. One it
-            // does not know down was held back when it went down, or this is
-            // a release that was passed on, coming back.
+            // A button the desktop was told is down always goes up again.
+            // One it was not told of was held back when it went down, or
+            // this is a release that was passed on, coming back.
             Event::Button {
                 code,
                 pressed: false,
@@ -538,37 +586,52 @@ impl Relay {
                 let down = held
                     .iter()
                     .position(|other| *other == code)
-                    .ok_or("the portal does not know the button down")?;
+                    .ok_or("the desktop was not told the button is down")?;
                 held.swap_remove(down);
                 Ok(())
             }
-            Event::Button { .. } | Event::Scroll { .. } | Event::Steps { .. } => {
-                // Without the position, it would act where the cursor is:
-                // on this window.
+            Event::Button { code, .. } => {
                 if !self.placed.get() {
-                    return Err("the portal did not take the position before it");
+                    return Err(NOT_PLACED);
                 }
-                if self
-                    .passed_at
-                    .get()
-                    .is_some_and(|passed| passed <= since && since < passed + ECHO)
-                {
-                    return Err("it came right after one that was passed on");
+                // One that was passed on and comes back finds the pointer
+                // where it was.
+                if self.pressed_at.get() == Some(spot) {
+                    return Err("a press was passed on at this spot already");
                 }
-                if let Event::Button { code, .. } = event {
-                    let mut held = self.held.borrow_mut();
-                    if held.contains(&code) {
-                        return Err("the portal knows the button down");
-                    }
-                    held.push(code);
+                let mut held = self.held.borrow_mut();
+                if held.contains(&code) {
+                    return Err("the desktop was told the button is down already");
                 }
-                self.passed_at.set(Some(Instant::now()));
+                held.push(code);
+                self.pressed_at.set(Some(spot));
+                Ok(())
+            }
+            // The end of a smooth scroll goes with its beginning.
+            Event::Scroll { finish: true, .. } => {
+                if self.swiping.replace(false) {
+                    Ok(())
+                } else {
+                    Err("no scroll that it ends was passed on")
+                }
+            }
+            Event::Scroll { .. } | Event::Steps { .. } => {
+                if !self.placed.get() {
+                    return Err(NOT_PLACED);
+                }
+                if self.scrolled_at.get() == Some(spot) {
+                    return Err("a scroll was passed on at this spot already");
+                }
+                self.scrolled_at.set(Some(spot));
+                if matches!(event, Event::Scroll { .. }) {
+                    self.swiping.set(true);
+                }
                 Ok(())
             }
         }
     }
 
-    /// Notes that the portal is not told of `event`.
+    /// Notes that the desktop is not told of `event`.
     fn hold_back(&self, event: Event, why: &str) {
         if let Some(visit) = self.visit.borrow_mut().as_mut() {
             visit.held_back += 1;
@@ -576,8 +639,9 @@ impl Relay {
         log::debug!("{event:?} is not passed on: {why}");
     }
 
-    /// The portal has answered the call for `event`, `took` after the event.
-    fn answered(&self, event: Event, took: Duration, result: Result<(), session::Error>) {
+    /// `event` has been passed on, or refused, `took` after the window got
+    /// it.
+    fn answered(&self, event: Event, took: Duration, result: Result<(), pointer::Error>) {
         if let Some(visit) = self.visit.borrow_mut().as_mut() {
             visit.answered += 1;
             visit.waited += took;
@@ -588,14 +652,11 @@ impl Relay {
             }
         }
         match result {
-            Ok(()) => log::debug!(
-                "{event:?}: the portal answered {:.1} ms after the event",
-                ms(took)
-            ),
+            Ok(()) => log::debug!("{event:?}: passed on {:.1} ms after the event", ms(took)),
             Err(err) if !self.complained.replace(true) => log::warn!(
-                "the portal did not take {event:?}: {err}. More of these go to the debug log"
+                "the desktop did not take {event:?}: {err}. More of these go to the debug log"
             ),
-            Err(err) => log::debug!("the portal did not take {event:?}: {err}"),
+            Err(err) => log::debug!("the desktop did not take {event:?}: {err}"),
         }
     }
 
@@ -609,11 +670,12 @@ impl Relay {
             return;
         };
         let ((x, y), (monitor_x, monitor_y)) = visit.began_at;
-        let portal = match visit.answered {
-            0 => "none answered yet".to_owned(),
+        let passed_on = match visit.answered {
+            0 => "nothing yet".to_owned(),
             answered => format!(
-                "{answered} answered, {:.1} ms after the event on average and {:.1} ms at most, \
-                 {} refused",
+                "{}, {:.1} ms after the window got them on average and {:.1} ms at most; \
+                 refused: {}",
+                answered - visit.refused,
                 ms(visit.waited) / f64::from(answered),
                 ms(visit.slowest),
                 visit.refused
@@ -627,7 +689,7 @@ impl Relay {
             "{}: the pointer came onto the picture at {x:.0},{y:.0}, which is \
              {monitor_x:.0},{monitor_y:.0} on the monitor, and was gone from it {:.1} ms later. \
              From the window in that time: positions {}, button events {}, scroll events {}. \
-             Calls to the portal: {portal}{held_back}",
+             Passed on to the desktop: {passed_on}{held_back}",
             self.variant.name(),
             ms(lasted),
             visit.positions,
@@ -656,26 +718,24 @@ fn evdev_button(button: u32) -> Option<i32> {
     }
 }
 
-/// Where on the monitor the spot `at` of the picture widget is, in the
-/// frame's pixels, or `None` if the picture is not drawn there.
+/// How far along the monitor the spot `at` of the picture widget is, from 0
+/// at the monitor's left or top edge to 1 at the other, or `None` if the
+/// picture is not drawn there.
 ///
 /// The widget draws the frame as large as fits it with the frame's aspect
 /// ratio kept, in the middle; that is what `ContentFit::Contain` does. With
 /// the window's size locked the frame fills the widget pixel for pixel. With
 /// the lock off it is scaled, and has bands beside it or above and below.
-fn to_monitor(widget: (f64, f64), frame: (f64, f64), at: (f64, f64)) -> Option<(f64, f64)> {
+fn along(widget: (f64, f64), frame: (f64, f64), at: (f64, f64)) -> Option<(f64, f64)> {
     if widget.0 <= 0.0 || widget.1 <= 0.0 || frame.0 <= 0.0 || frame.1 <= 0.0 {
         return None;
     }
     let scale = (widget.0 / frame.0).min(widget.1 / frame.1);
     let drawn = (frame.0 * scale, frame.1 * scale);
     let origin = ((widget.0 - drawn.0) / 2.0, (widget.1 - drawn.1) / 2.0);
-    // How far along the picture, from 0 at its left or top edge to 1 at the
-    // other.
     let along = ((at.0 - origin.0) / drawn.0, (at.1 - origin.1) / drawn.1);
     let within = 0.0..1.0;
-    (within.contains(&along.0) && within.contains(&along.1))
-        .then_some((along.0 * frame.0, along.1 * frame.1))
+    (within.contains(&along.0) && within.contains(&along.1)).then_some(along)
 }
 
 #[cfg(test)]
@@ -684,11 +744,11 @@ mod tests {
 
     const FULL_HD: (f64, f64) = (1920.0, 1080.0);
 
-    /// The spot on the monitor, to the thousandth, so that the last bit of
-    /// the arithmetic does not count.
+    /// The spot on the monitor in the frame's pixels, to the thousandth, so
+    /// that the last bit of the arithmetic does not count.
     fn spot(widget: (f64, f64), frame: (f64, f64), at: (f64, f64)) -> Option<(f64, f64)> {
         let round = |value: f64| (value * 1000.0).round() / 1000.0;
-        to_monitor(widget, frame, at).map(|(x, y)| (round(x), round(y)))
+        along(widget, frame, at).map(|(x, y)| (round(x * frame.0), round(y * frame.1)))
     }
 
     #[test]

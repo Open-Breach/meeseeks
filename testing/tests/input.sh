@@ -13,10 +13,14 @@
 # echo    The portal takes every position but the cursor stays in the window,
 #         and the buttons and scrolls it is sent land where the cursor is: on
 #         the window, which gets each of them a second time. The app must not
-#         pass that one on again.
+#         pass that one on again. It passes on one press and one scroll for
+#         each spot the pointer is at, which is why the steps below move the
+#         pointer a little between two of a kind.
 # nosize  Start gives no size for the stream, as GNOME's portal does for a
 #         virtual monitor, and every position is refused for it. The app
 #         sends one for each stay of the pointer, and no button or scroll.
+#         On GNOME itself the app would move the pointer over libei instead;
+#         the mock has none, see gnome/tests/input.sh for that.
 # denied  Start grants no pointer, as GNOME's dialog does with "Allow Remote
 #         Interaction" left off.
 #
@@ -85,7 +89,7 @@ hand move $((x + 640)) $((py + 360)); sent
 echo "== ten quick moves to the right, to 740,360: forward sends them, or the newest of those that had to wait"
 for step in 1 2 3 4 5 6 7 8 9 10; do echo "move $((x + 640 + step * 10)) $((py + 360))" >&9; done; sleep 3; sent
 echo "== left button down and up, the wheel two clicks down, a swipe of 30: forward passes them on if the portal took the position"
-hand press 272; hand release 272; hand wheel 2; hand swipe 30; sent
+hand press 272; hand release 272; hand wheel 2; hand move $((x + 741)) $((py + 360)); hand swipe 30; sent
 echo "== left button down, then off the picture onto the title bar with it held: forward lets go of it"
 hand press 272; hand move $((x + 640)) $((y + bar / 2)); hand release 272; sent
 echo "== onto the picture at 1279,719, its last pixel"

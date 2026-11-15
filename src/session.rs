@@ -4,16 +4,17 @@
 //!
 //! There are two ways to ask. The plain one is a ScreenCast session. The
 //! other is for the experiment in `src/input.rs`: a RemoteDesktop session
-//! with the same screen cast in it, which also lets the app move the pointer.
+//! with the same screen cast in it, which also grants the pointer that
+//! `src/pointer.rs` moves.
 
 use std::fmt;
 use std::os::fd::OwnedFd;
 use std::rc::Rc;
 
-use ashpd::desktop::remote_desktop::{
-    Axis, DeviceType, KeyState, NotifyPointerAxisOptions, RemoteDesktop, SelectDevicesOptions,
-};
+use ashpd::desktop::remote_desktop::{DeviceType, RemoteDesktop, SelectDevicesOptions};
 use ashpd::desktop::screencast::{CursorMode, Screencast, SelectSourcesOptions, SourceType};
+
+use crate::pointer::{Monitor, Pointer};
 
 /// Where the virtual monitor's frames can be picked up.
 pub struct Stream {
@@ -71,14 +72,12 @@ impl Session {
             .map_err(Error::Remote)?;
 
         match start_remote_stream(&proxy, &cast, &session).await {
-            Ok((stream, granted, size)) => {
+            Ok((stream, monitor)) => {
                 let session = Rc::new(session);
-                let pointer = granted.then(|| Pointer {
-                    proxy,
-                    session: session.clone(),
-                    node_id: stream.node_id,
-                    size,
-                });
+                let pointer = match monitor {
+                    Some(monitor) => Some(Pointer::open(proxy, session.clone(), monitor).await),
+                    None => None,
+                };
                 let session = Handle::Remote(session);
                 Ok((Self { session }, stream, pointer))
             }
@@ -138,13 +137,13 @@ async fn start_stream(
 
 /// The RemoteDesktop way to the same stream: the pointer and the screen cast
 /// are both chosen before the one Start, so the portal asks once for both.
-/// Hands back, with the stream, whether the pointer was granted and the size
-/// the portal gave for the stream, if it gave one.
+/// Hands back, with the stream, what a pointer has to know of the monitor,
+/// if the pointer was granted.
 async fn start_remote_stream(
     proxy: &RemoteDesktop,
     cast: &Screencast,
     session: &ashpd::desktop::Session<RemoteDesktop>,
-) -> Result<(Stream, bool, Option<(i32, i32)>), Error> {
+) -> Result<(Stream, Option<Monitor>), Error> {
     proxy
         .select_devices(
             session,
@@ -175,6 +174,7 @@ async fn start_remote_stream(
     }
     let node_id = stream.pipe_wire_node_id();
     let size = stream.size();
+    let mapping_id = stream.mapping_id().map(str::to_owned);
     let granted = started.devices().contains(DeviceType::POINTER);
     log::info!(
         "the portal started a virtual monitor on PipeWire node {node_id} in a RemoteDesktop \
@@ -192,69 +192,12 @@ async fn start_remote_stream(
         .open_pipe_wire_remote(session, Default::default())
         .await?;
 
-    Ok((Stream { fd, node_id }, granted, size))
-}
-
-/// The pointer of a RemoteDesktop session: the desktop's own, moved on the
-/// app's word. Every position is one on the session's virtual monitor.
-pub struct Pointer {
-    proxy: RemoteDesktop,
-    session: Rc<ashpd::desktop::Session<RemoteDesktop>>,
-    node_id: u32,
-    size: Option<(i32, i32)>,
-}
-
-impl Pointer {
-    /// The size the portal gave for the monitor's stream when the session
-    /// started, in the units it takes positions in. Not every portal gives
-    /// one.
-    pub fn reported_size(&self) -> Option<(i32, i32)> {
-        self.size
-    }
-
-    /// Moves the pointer to a spot on the virtual monitor, counted from the
-    /// monitor's top left corner.
-    pub async fn move_to(&self, x: f64, y: f64) -> Result<(), Error> {
-        self.proxy
-            .notify_pointer_motion_absolute(&self.session, self.node_id, x, y, Default::default())
-            .await
-            .map_err(Error::Remote)
-    }
-
-    /// Presses or releases a button, named by its Linux evdev code.
-    pub async fn button(&self, code: i32, pressed: bool) -> Result<(), Error> {
-        let state = if pressed {
-            KeyState::Pressed
-        } else {
-            KeyState::Released
-        };
-        self.proxy
-            .notify_pointer_button(&self.session, code, state, Default::default())
-            .await
-            .map_err(Error::Remote)
-    }
-
-    /// Scrolls smoothly, the way a touchpad does. `finish` ends the gesture.
-    pub async fn scroll(&self, dx: f64, dy: f64, finish: bool) -> Result<(), Error> {
-        let options = NotifyPointerAxisOptions::default().set_finish(finish);
-        self.proxy
-            .notify_pointer_axis(&self.session, dx, dy, options)
-            .await
-            .map_err(Error::Remote)
-    }
-
-    /// Scrolls by whole clicks of a wheel, to the right and down if positive.
-    pub async fn scroll_steps(&self, horizontal: i32, vertical: i32) -> Result<(), Error> {
-        for (axis, steps) in [(Axis::Horizontal, horizontal), (Axis::Vertical, vertical)] {
-            if steps != 0 {
-                self.proxy
-                    .notify_pointer_axis_discrete(&self.session, axis, steps, Default::default())
-                    .await
-                    .map_err(Error::Remote)?;
-            }
-        }
-        Ok(())
-    }
+    let monitor = granted.then_some(Monitor {
+        node_id,
+        size,
+        mapping_id,
+    });
+    Ok((Stream { fd, node_id }, monitor))
 }
 
 #[derive(Debug)]
