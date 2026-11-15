@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Meeseeks
+Comment=A virtual monitor shown as a window, for sharing or recording a sane-sized screen
+Exec=meeseeks
+Icon=meeseeks
+Terminal=false
+Categories=Utility;
+Keywords=monitor;display;screen;share;record;virtual;
+StartupNotify=true
+StartupWMClass=meeseeks
