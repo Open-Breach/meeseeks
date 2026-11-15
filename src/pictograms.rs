@@ -1,5 +1,6 @@
 //! The few pictograms the app draws itself, so that they look the same under
-//! any icon theme: the marks of the startup checks and the warning sign.
+//! any icon theme: the marks of the startup checks, the warning sign and the
+//! sign that asks for the window to be moved back.
 
 use std::f64::consts::PI;
 
@@ -10,6 +11,7 @@ const GREEN: (f64, f64, f64) = (0.106, 0.522, 0.325);
 const RED: (f64, f64, f64) = (0.753, 0.110, 0.157);
 const AMBER: (f64, f64, f64) = (0.898, 0.647, 0.039);
 const INK: (f64, f64, f64) = (0.180, 0.204, 0.212);
+const GREY: (f64, f64, f64) = (0.373, 0.396, 0.412);
 const WHITE: (f64, f64, f64) = (1.0, 1.0, 1.0);
 
 /// A drawing of `size` pixels a side, named `name` for screen readers.
@@ -89,5 +91,29 @@ pub fn warning() -> gtk::DrawingArea {
         line(cr, &[(10.0, 7.8), (10.0, 11.8)]);
         cr.arc(10.0, 14.5, 1.0, 0.0, 2.0 * PI);
         let _ = cr.fill();
+    })
+}
+
+/// A screen with an arrow pointing back out of it, for the message shown
+/// while the window is on its own virtual monitor.
+pub fn move_back() -> gtk::DrawingArea {
+    pictogram(64, "Move back", |cr| {
+        colour(cr, GREY);
+        cr.set_line_width(3.0);
+        // The screen, with rounded corners.
+        let (x, y, w, h, r) = (8.0, 12.0, 48.0, 32.0, 4.0);
+        cr.new_sub_path();
+        cr.arc(x + w - r, y + r, r, -PI / 2.0, 0.0);
+        cr.arc(x + w - r, y + h - r, r, 0.0, PI / 2.0);
+        cr.arc(x + r, y + h - r, r, PI / 2.0, PI);
+        cr.arc(x + r, y + r, r, PI, 1.5 * PI);
+        cr.close_path();
+        let _ = cr.stroke();
+        // Its stand.
+        line(cr, &[(32.0, 44.0), (32.0, 54.0)]);
+        line(cr, &[(24.0, 54.0), (40.0, 54.0)]);
+        // The arrow.
+        line(cr, &[(41.0, 28.0), (24.0, 28.0)]);
+        line(cr, &[(30.0, 22.0), (24.0, 28.0), (30.0, 34.0)]);
     })
 }
