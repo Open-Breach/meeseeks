@@ -28,6 +28,11 @@ MOCK_POINTER_OUTPUT=<sway output> makes the mock do what a desktop does with
 its one cursor: a position sent for the stream puts sway's cursor at that spot
 of that output. Without it the call is only printed and the cursor stays
 where it is.
+
+MOCK_KDE_MARKER=1 has the mock answer as KDE's portal backend too, with the
+one thing the app reads off it: the `version` property of its Inhibit
+interface, which Plasma has from 6.6 on. Without it there is no such name on
+the bus, which is to the app what a Plasma before 6.6 is.
 """
 
 import json
@@ -48,6 +53,8 @@ REMOTE_DESKTOP = "org.freedesktop.portal.RemoteDesktop"
 REQUEST = "org.freedesktop.portal.Request"
 SESSION = "org.freedesktop.portal.Session"
 PROPERTIES = "org.freedesktop.DBus.Properties"
+KDE_BACKEND = "org.freedesktop.impl.portal.desktop.kde"
+KDE_INHIBIT = "org.freedesktop.impl.portal.Inhibit"
 
 def say(*args):
     print("[portal]", *args, flush=True)
@@ -356,10 +363,13 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     name = dbus.service.BusName(BUS_NAME, bus)  # noqa: F841 (keeps the name)
-    if os.environ.get("MOCK_REMOTE", "1") == "0":
-        ScreenCast(bus)
-    else:
-        Portal(bus)
+    kind = ScreenCast if os.environ.get("MOCK_REMOTE", "1") == "0" else Portal
+    if os.environ.get("MOCK_KDE_MARKER"):
+        # The real backend is a process of its own with the same object path.
+        backend = dbus.service.BusName(KDE_BACKEND, bus)  # noqa: F841 (keeps the name)
+        kind.properties = dict(kind.properties, **{KDE_INHIBIT: {"version": dbus.UInt32(3)}})
+        say("answering as KDE's portal backend too, with an Inhibit version")
+    kind(bus)
     say("ready")
     GLib.MainLoop().run()
 
