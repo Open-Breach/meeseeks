@@ -1,13 +1,17 @@
 #!/bin/bash
 # The screenshot button: a click saves the virtual monitor's frame as a PNG
 # in the Pictures folder.
-# Usage: screenshot.sh [ok|scaled|no-folder]
+# Usage: screenshot.sh [ok|scaled|away|no-folder]
 #
 #   ok         a click, then two more within a second: three files in
 #              <Pictures>/Meeseeks, named after the date and time, the third
 #              with " (2)", each as large as the monitor
 #   scaled     the lock off and the window at half its size: the file is as
 #              large as the monitor all the same
+#   away       the window on its own virtual monitor, where it shows a message
+#              in place of the picture: the file is the monitor's frame all
+#              the same. An output made after Start stands in for the
+#              virtual monitor, as in away.sh
 #   no-folder  a file stands where the Meeseeks folder would go, so it cannot
 #              be made: the warning mark, a warning in the log, and the app
 #              keeps running
@@ -19,8 +23,8 @@
 . "$T/lib.sh"
 case=${1:-ok}
 case $case in
-  ok | scaled | no-folder) ;;
-  *) sed -n 2,13p "$0" >&2; exit 1 ;;
+  ok | scaled | away | no-folder) ;;
+  *) sed -n 2,17p "$0" >&2; exit 1 ;;
 esac
 name=screenshot-$case
 
@@ -59,6 +63,13 @@ title_bar "$name-running"
 if [ "$case" = scaled ]; then
   echo "== the window at half its size"
   swaymsg -q "[title=\"Meeseeks\"] resize set 640 $((360 + bar))"; sleep 1
+fi
+if [ "$case" = away ]; then
+  echo "== the window on an output that has appeared since Start: the message ($name-message.png)"
+  swaymsg -q create_output; sleep 0.5
+  swaymsg -q '[title="Meeseeks"] move container to output HEADLESS-2'; sleep 1
+  swaymsg -q '[title="Meeseeks"] focus'; sleep 0.5
+  grim -o HEADLESS-2 "$OUT/$name-message.png"
 fi
 echo "== Tab from Stop to the button, and press it ($name-pressed.png, taken within its second and a half)"
 keys -k Tab -k space
