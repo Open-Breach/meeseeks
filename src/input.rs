@@ -7,11 +7,15 @@
 //! The desktop has no pointer of its own to offer: what gets moved is its
 //! one cursor. A position sent to it takes the real cursor off this window
 //! and puts it on the virtual monitor, where the window hears no more of it.
-//! The two variants differ in what they make of that.
+//! The variants differ in what they make of that.
 //!
 //! - `teleport` counts on it. When the pointer moves onto the picture it is
 //!   sent, once, to the matching spot on the monitor. From there the user
 //!   works on the monitor itself and leaves it wherever the layout leads.
+//!   Getting in is easy and getting out is not: on the way back, any
+//!   crossing of the picture sends the pointer to the monitor again.
+//! - `click` is `teleport` on a click instead: moving over the picture does
+//!   nothing, and a click on it sends the pointer to that spot.
 //! - `forward` passes on what the window gets while the pointer is over the
 //!   picture: every position, button and scroll. Where the first position
 //!   takes the cursor away, that position is all the window gets to pass on,
@@ -49,6 +53,7 @@ const BTN_LEFT: i32 = 0x110;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Variant {
     Teleport,
+    Click,
     Forward,
 }
 
@@ -59,10 +64,11 @@ impl Variant {
         let variant = match value.trim() {
             "" => return None,
             "teleport" => Self::Teleport,
+            "click" => Self::Click,
             "forward" => Self::Forward,
             other => {
                 log::warn!(
-                    "{VARIABLE}: `{other}` is neither `teleport` nor `forward`; \
+                    "{VARIABLE}: `{other}` is none of `teleport`, `click` and `forward`; \
                      the input experiment stays off"
                 );
                 return None;
@@ -75,7 +81,16 @@ impl Variant {
     fn name(self) -> &'static str {
         match self {
             Self::Teleport => "teleport",
+            Self::Click => "click",
             Self::Forward => "forward",
+        }
+    }
+
+    /// How a stay of the pointer begins, for the log.
+    fn begins(self) -> &'static str {
+        match self {
+            Self::Teleport | Self::Forward => "the pointer came onto the picture at",
+            Self::Click => "the picture was clicked at",
         }
     }
 }
@@ -122,18 +137,32 @@ impl Input {
         let weak = || Rc::downgrade(&relay);
         let mut controllers = Vec::<gtk::EventController>::new();
 
-        // Only a pointer that moves counts. When what lies under a resting
-        // pointer changes, as it does when the picture appears, GTK makes up
-        // a motion of its own. Those come without a time.
         let motion = gtk::EventControllerMotion::new();
-        let relay_weak = weak();
-        motion.connect_motion(move |motion, x, y| {
-            if motion.current_event_time() != gdk::CURRENT_TIME
-                && let Some(relay) = relay_weak.upgrade()
-            {
-                relay.at(x, y);
-            }
-        });
+        if variant == Variant::Click {
+            // A click with the left button, down and up on the picture.
+            let click = gtk::GestureClick::builder()
+                .button(gdk::BUTTON_PRIMARY)
+                .build();
+            let relay_weak = weak();
+            click.connect_released(move |_, _, x, y| {
+                if let Some(relay) = relay_weak.upgrade() {
+                    relay.at(x, y);
+                }
+            });
+            controllers.push(click.upcast());
+        } else {
+            // Only a pointer that moves counts. When what lies under a
+            // resting pointer changes, as it does when the picture appears,
+            // GTK makes up a motion of its own. Those come without a time.
+            let relay_weak = weak();
+            motion.connect_motion(move |motion, x, y| {
+                if motion.current_event_time() != gdk::CURRENT_TIME
+                    && let Some(relay) = relay_weak.upgrade()
+                {
+                    relay.at(x, y);
+                }
+            });
+        }
         let relay_weak = weak();
         motion.connect_leave(move |_| {
             if let Some(relay) = relay_weak.upgrade() {
@@ -328,7 +357,8 @@ struct Relay {
 }
 
 impl Relay {
-    /// The pointer is at `(x, y)` of the picture widget.
+    /// The pointer is at `(x, y)` of the picture widget, or, with `click`,
+    /// was clicked there.
     fn at(self: &Rc<Self>, x: f64, y: f64) {
         let Some((along, frame)) = self.spot(x, y) else {
             // On the widget, but beside the picture drawn in it.
@@ -341,8 +371,8 @@ impl Relay {
         let arrived = !self.over();
         if arrived {
             log::debug!(
-                "the pointer has come onto the picture at {x},{y}: frames of {}×{} drawn in a \
-                 widget of {}×{}",
+                "{} {x},{y}: frames of {}×{} drawn in a widget of {}×{}",
+                self.variant.begins(),
                 frame.0,
                 frame.1,
                 self.picture.width(),
@@ -380,8 +410,13 @@ impl Relay {
         }
         // `teleport` sends the pointer off once. If it is still here after
         // that, the desktop did not take it, and asking again for every move
-        // would not help.
-        if arrived || (self.variant == Variant::Forward && !turned_down) {
+        // would not help. A click asks each time.
+        let again = match self.variant {
+            Variant::Teleport => false,
+            Variant::Click => true,
+            Variant::Forward => !turned_down,
+        };
+        if arrived || again {
             self.send(Event::Position { along, frame });
         }
     }
@@ -686,11 +721,12 @@ impl Relay {
             held_back => format!("; {held_back} buttons and scrolls not passed on"),
         };
         log::info!(
-            "{}: the pointer came onto the picture at {x:.0},{y:.0}, which is \
-             {monitor_x:.0},{monitor_y:.0} on the monitor, and was gone from it {:.1} ms later. \
-             From the window in that time: positions {}, button events {}, scroll events {}. \
-             Passed on to the desktop: {passed_on}{held_back}",
+            "{}: {} {x:.0},{y:.0}, which is {monitor_x:.0},{monitor_y:.0} on the monitor. The \
+             pointer was off the picture {:.1} ms later. From the window in that time: positions \
+             {}, button events {}, scroll events {}. Passed on to the desktop: \
+             {passed_on}{held_back}",
             self.variant.name(),
+            self.variant.begins(),
             ms(lasted),
             visit.positions,
             visit.buttons,

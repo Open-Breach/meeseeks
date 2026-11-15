@@ -2,7 +2,7 @@
 # The input experiment, MEESEEKS_INPUT, against the mock portal's
 # RemoteDesktop: what the app sends when a pointer comes onto the picture,
 # moves, clicks and scrolls there.
-# Usage: input.sh <teleport|forward> [stay|warp|echo|nosize|denied] [locked|unlocked]
+# Usage: input.sh <teleport|click|forward> [stay|warp|echo|nosize|denied] [locked|unlocked]
 #
 # stay    The portal takes every position and only prints it; the cursor stays
 #         in the window. No desktop does that, but it shows everything the app
@@ -28,7 +28,7 @@
 # says how far it moved, so on a desktop the cursor would not come back from
 # the monitor to a spot in the window the way it does here between the steps.
 . "$T/lib.sh"
-usage="usage: input.sh <teleport|forward> [stay|warp|echo|nosize|denied] [locked|unlocked]"
+usage="usage: input.sh <teleport|click|forward> [stay|warp|echo|nosize|denied] [locked|unlocked]"
 variant=${1:?$usage}
 portal=${2:-stay}
 lock=${3:-locked}
@@ -68,7 +68,11 @@ sent() {
 # Brings the pointer onto a spot of the picture by way of the title bar. A
 # pointer that lands on the window in one jump is told to the app as having
 # entered it, not as having moved, and the app goes by moves alone.
-onto() { hand move $((x + w / 2)) $((y + bar / 2)); hand move $((x + $1)) $((py + $2)); }
+onto() {
+  hand move $((x + w / 2)) $((y + bar / 2)); hand move $((x + $1)) $((py + $2))
+  # With `click` it takes a click there to send the pointer off.
+  if [ "$variant" = click ]; then hand press 272; hand release 272; fi
+}
 read -r x y w h < <(window_rect)
 bar=$((h - 720))
 picture
@@ -84,6 +88,11 @@ hand move 5 5; sent > /dev/null
 
 echo "== onto the picture at 320,180: a position of 320,180"
 onto 320 180; sent
+if [ "$variant" = click ]; then
+  echo "== on to 640,360 and ten quick moves across the picture, without a click: nothing"
+  hand move $((x + 640)) $((py + 360)); sent
+  for step in 1 2 3 4 5 6 7 8 9 10; do echo "move $((x + 640 + step * 10)) $((py + 360))" >&9; done; sleep 3; sent
+else
 echo "== on to 640,360 if the pointer is still there: forward sends it, teleport has sent the pointer off already"
 hand move $((x + 640)) $((py + 360)); sent
 echo "== ten quick moves to the right, to 740,360: forward sends them, or the newest of those that had to wait"
@@ -92,6 +101,7 @@ echo "== left button down and up, the wheel two clicks down, a swipe of 30: forw
 hand press 272; hand release 272; hand wheel 2; hand move $((x + 741)) $((py + 360)); hand swipe 30; sent
 echo "== left button down, then off the picture onto the title bar with it held: forward lets go of it"
 hand press 272; hand move $((x + 640)) $((y + bar / 2)); hand release 272; sent
+fi
 echo "== onto the picture at 1279,719, its last pixel"
 onto 1279 719; sent
 hand move 5 5; sent > /dev/null
