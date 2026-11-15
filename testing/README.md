@@ -1,6 +1,6 @@
 # Test setups
 
-Three ways to run the unmodified app where there is no GNOME or KDE session,
+Four ways to run the unmodified app where there is no GNOME or KDE session,
 such as a container. The first two put stand-ins around it:
 
 - a mock of `org.freedesktop.portal.ScreenCast` and of the part of
@@ -15,8 +15,8 @@ KWin and the DMA-BUF path are not exercised. The tests print what happened and
 leave logs and screenshots in `out/`. Nothing passes or fails by itself: read
 the output.
 
-The third, further down, has no stand-ins: a real Mutter and the real portal,
-headless.
+The third and the fourth, further down, have no stand-ins: a real Mutter or a
+real KWin, each with the real portal, headless.
 
 Nothing of the machine's own session is used. Each run makes its own runtime
 directory under `/tmp` and removes it again.
@@ -138,3 +138,52 @@ from where it is, which is also the way onto another monitor.
 | `gnome/tests/screenshot.sh` | The screenshot button on Mutter's own frames. A click on the picture sends the pointer to 320,180 of the monitor and the button is pressed: the file, kept as `out/gnome-screenshot-with-cursor.png`, is 1280×720 and has the cursor at that spot. With the mouse back on the screen the next file has none. The test prints the pixels around the spot for both. `GSK_RENDERER=gl` runs it with GTK drawing in GL, which reads the frame back from the graphics card, or from Mesa's stand-in for one |
 | `gnome/tests/loop.sh` | Start, Stop, Start again, close the window while running. The dialog is GNOME's "Remote Desktop" (`out/gnome-loop-dialog.png`) and is answered as it comes, with Allow Remote Interaction off: a monitor and no pointer. Look for `Added virtual monitor` and `Removed virtual monitor` in Mutter's log for each start, the `buffer path` line and exit status 0 |
 | `gnome/tests/input.sh [granted\|denied] [locked\|unlocked]` | The teleporter. The dialog is GNOME's "Remote Desktop" (`out/gnome-input-*-dialog.png`), with Allow Remote Interaction off as it comes. After each step the test prints what the app says it sent and what the window on the virtual monitor got. `granted`: the switch is turned on and the app moves the pointer over libei. Crossing the picture, the right button and the wheel send nothing. A left click on the picture puts the cursor on the monitor: its window gets `enter` at the very spot that was clicked, then the click and the wheel that follow, which come from the mouse itself now that the cursor is there. The step called the way out, run when the desktop is not scaled, sends the pointer to the monitor and then moves it as a real mouse does: off the monitor over its left edge, and on across the picture, where nothing happens. `denied`: the switch is left off, no pointer is granted, and the monitor is there all the same. `unlocked` tiles the window, so that the picture is scaled and has bands. With `SCREEN=3200x2000 SCALE=2`, and with `LAYOUT=logical` on top, the desktop is scaled; the monitor's window then counts in units of two pixels, half of what the app says it sent |
+
+## On a headless Plasma
+
+KWin can run without a screen too. `kde/env.sh` brings up a private one with
+one virtual output for a screen, and next to it the real xdg-desktop-portal
+with its KDE backend: the dialog that comes up is Plasma's own, and KWin makes
+the virtual monitor.
+
+It needs a Plasma, which goes into a root of its own: `newer-pipewire/make-root.sh`
+with an Ubuntu suite that has the Plasma wanted, and on top of it the packages
+at the head of `kde/in-root.sh`. Two ways into that root:
+
+```
+cargo build
+testing/kde/in-root.sh /var/tmp/kde-old kde/tests/checks.sh
+testing/kde/in-vm.sh /var/tmp/kde-new kde/tests/loop.sh
+```
+
+`in-root.sh` runs a test in the root with `chroot`, on this machine's kernel.
+That is enough for the startup checks and for what Plasma says of itself.
+It is not enough for a monitor where there is no graphics card: KWin then
+composites with QPainter, and its screen cast refuses that ("Unsupported
+compositing type"). `in-vm.sh` boots the same root in an emulated machine,
+whose kernel has a stand-in for a card (`vgem`); the head of that script says
+what it needs and why it is slow.
+
+Nobody sits at that desktop. `kde/hands.py` works its keyboard and its pointer
+through KWin's fake input protocol and takes the screenshots through KWin's
+screenshot interface; KWin is started with its permission checks for both
+switched off. The portal's dialog is answered with Return. The window on the
+virtual monitor that says where the pointer is, is `gnome/landing.py`.
+
+It is the distribution's Plasma, not a session somebody works in: no
+plasmashell unless `SHELL_TOO=1` asks for it, software rendering, and a mouse
+that is told where to be. In the emulated machine everything takes several
+times as long as on a desktop.
+
+| Test | What it shows |
+| --- | --- |
+| `kde/tests/checks.sh` | The startup checks on that Plasma. Before 6.5 the portal has no virtual monitors (`its source types are 3`): the app shows its dialog and ends with Close |
+| `kde/tests/versions.sh` | What a program can find out about the Plasma it runs on before it asks the portal for anything: the packages, what `kwin_wayland` and `plasmashell` say for `--version`, what is on the session bus, and the `version` properties of the KDE portal backend's interfaces. The backend has no version of its own; its Inhibit interface has a `version` property from 6.6.0 on |
+| `kde/tests/loop.sh [<width> <height>]` | Start, the portal's dialog, Stop, Start again, close the window while running. KWin makes the monitor 1920×1080 whatever is asked for, so that is the default here; with another size the Start fails. Look for the `buffer path` line, which is DMA-BUF in the emulated machine, and exit status 0 |
+| `kde/tests/input.sh` | The teleporter, for a build that asks Plasma for remote control, which the app does not do: it needs `has_teleporter` in `src/desktop.rs` to say yes for KDE. After each step the test prints what the app says it sent and what the window on the virtual monitor got, and it saves a frame with the screenshot button once with the pointer on the monitor and once without, printing the pixels at the spot. `KDE_BACKEND` runs another build of the portal's KDE backend in place of the root's |
+
+These were last run with Plasma 6.4.5 (Ubuntu 25.10) in a root, and with
+Plasma 6.6.4 (Ubuntu 26.04) in the emulated machine, without KVM. A Plasma 6.5
+was not to be had as packages; its portal backend was built from source
+(6.5.6, and 6.5.6 with the remote desktop code of 6.5.3) and run with KWin
+6.6.4 through `KDE_BACKEND`.
