@@ -138,13 +138,15 @@ const CSS: &str = r#"
 .mk-cap {
   border-radius: 9999px;
   color: white;
-  font-size: 120%;
+  /* Large enough to count as large text, on blue deep enough to read it
+     by: the bright spot of the cap stays up and to the left of the word. */
+  font-size: 130%;
   font-weight: 700;
   text-shadow: 0 1px 1.5px alpha(black, 0.32);
   background-color: @mk_accent;
   background-image:
     radial-gradient(ellipse 29px 12px at 50% 19px, alpha(white, 0.5), alpha(white, 0.3) 78%, alpha(white, 0)),
-    radial-gradient(circle 79px at 38% 26%, #6AB3F8, #1C71D8 60%, #1860BC);
+    radial-gradient(circle 79px at 36% 18%, #6AB3F8, #2477DB 20%, #1C71D8 40%, #1860BC);
   box-shadow: inset 0 2px 1.5px alpha(white, 0.55),
               inset 0 -4px 9px alpha(black, 0.24),
               0 8px 0 #1657A8;
@@ -154,7 +156,7 @@ const CSS: &str = r#"
 }
 .mk-start:hover > .mk-cap {
   transform: translateY(-3px);
-  filter: brightness(1.1);
+  filter: brightness(1.08);
   box-shadow: inset 0 2px 1.5px alpha(white, 0.6),
               inset 0 -4px 9px alpha(black, 0.22),
               0 11px 0 #1657A8;
@@ -260,6 +262,12 @@ window.dialog.message .dialog-action-area > button {
   background-color: @mk_card_bg;
   color: @mk_text;
 }
+window.dialog.message .dialog-action-area > button:first-child { border-bottom-left-radius: 8px; }
+window.dialog.message .dialog-action-area > button:last-child { border-bottom-right-radius: 8px; }
+window.dialog.message .dialog-action-area > button:focus-visible {
+  outline: 2px solid @mk_accent;
+  outline-offset: -2px;
+}
 window.dialog.message .dialog-action-area > button:hover { background-color: @mk_control_hover; }
 window.dialog.message .dialog-action-area > button:active { background-color: @mk_control_active; }
 window.dialog.message .dialog-action-area > button.default { color: @mk_accent; font-weight: 600; }
@@ -277,7 +285,7 @@ window.dialog.message .dialog-action-area > button.default { color: @mk_accent; 
 }
 .mk-stop:hover { background-color: #A91822; }
 .mk-stop:active { background-color: #96141D; }
-.mk-stop:focus-visible { outline: 2px solid alpha(@mk_destructive, 0.5); outline-offset: 2px; }
+.mk-stop:focus-visible { outline: 2px solid @mk_destructive; outline-offset: 2px; }
 .mk-stop-square {
   min-width: 10px;
   min-height: 10px;
