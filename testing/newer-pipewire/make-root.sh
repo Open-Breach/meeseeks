@@ -29,14 +29,14 @@ mount --bind /dev "$root/dev"
 trap 'umount "$root/proc" "$root/dev"' EXIT
 
 # The PipeWire stack and what compiles the test programs against it; Python
-# with the bindings the mock portal and the consumer scripts use; GTK and the
-# GTK 4 sink for the app itself, with a font so the button has a label.
+# with the bindings the mock portal and the consumer scripts use; GTK for the
+# app itself, with a font so the button has a label.
 chroot "$root" /usr/bin/env DEBIAN_FRONTEND=noninteractive \
   apt-get install -y --no-install-recommends \
   pipewire pipewire-bin wireplumber gstreamer1.0-pipewire gstreamer1.0-tools \
   gstreamer1.0-plugins-base libpipewire-0.3-dev gcc libc6-dev pkg-config \
   dbus dbus-user-session procps \
   python3-gi gir1.2-gstreamer-1.0 python3-dbus \
-  libgtk-4-1 gstreamer1.0-gtk4 fonts-dejavu-core
+  libgtk-4-1 libgstreamer-gl1.0-0 fonts-dejavu-core
 
 chroot "$root" pipewire --version

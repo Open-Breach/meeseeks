@@ -79,11 +79,6 @@ pub async fn run(asked: Option<Renderer>) -> Vec<Check> {
             "Install the GStreamer PipeWire plugin (Fedora: pipewire-gstreamer; \
              Debian and Ubuntu: gstreamer1.0-pipewire; Arch: gst-plugin-pipewire).",
         ),
-        gst_element(
-            "gtk4paintablesink",
-            "Install the GTK 4 sink from gst-plugins-rs (Fedora: gstreamer1-plugin-gtk4; \
-             Debian and Ubuntu: gstreamer1.0-gtk4; Arch: gst-plugin-gtk4).",
-        ),
         gtk_renderer(asked),
     ]
 }

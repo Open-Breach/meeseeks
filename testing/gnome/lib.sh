@@ -5,10 +5,6 @@ OUT=$T/out
 APP=${APP:-$T/../target/debug/meeseeks}
 PYTHON=${PYTHON:-python3}
 SETTINGS=$XDG_CONFIG_HOME/meeseeks/settings.toml
-# A gtk4paintablesink built by hand, where the distribution packages none.
-if ! gst-inspect-1.0 gtk4paintablesink > /dev/null 2>&1 && [ -d "$T/build/plugins" ]; then
-  export GST_PLUGIN_PATH=$T/build/plugins
-fi
 
 if [ ! -x "$APP" ]; then
   echo "missing $APP; run cargo build first" >&2

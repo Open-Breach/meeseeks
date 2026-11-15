@@ -12,6 +12,10 @@ description = "A virtual monitor shown as a window, for sharing a sane-sized scr
 ashpd = { version = "0.14", default-features = false, features = ["async-io", "remote_desktop", "screencast"] }
 env_logger = "0.11"
 gst = { package = "gstreamer", version = "0.25" }
+# gtk4paintablesink, linked into the binary so that no distribution package
+# is needed for it: Ubuntu 24.04 has none. `dmabuf` is the zero-copy path,
+# which needs GTK 4.14; `wayland` lets the sink share GTK's GL context there.
+gst-plugin-gtk4 = { version = "0.15", features = ["gtk_v4_14", "dmabuf", "wayland"] }
 # GtkGraphicsOffload, the widget that hands DMA-BUF frames to the compositor,
 # arrived in GTK 4.14.
 gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }

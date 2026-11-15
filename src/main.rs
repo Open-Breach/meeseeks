@@ -670,6 +670,11 @@ fn activate(
 
 fn main() -> glib::ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // Before the startup checks and long before the pipeline: the sink is
+    // part of this binary and has to be made known to GStreamer.
+    if let Err(err) = display::init() {
+        log::error!("GStreamer could not be made ready: {err}");
+    }
     let settings = Settings::load();
     // SAFETY: nothing so far has started a thread, and GTK, which reads what
     // this sets, is not initialised yet.

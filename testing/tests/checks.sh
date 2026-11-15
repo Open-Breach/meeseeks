@@ -1,11 +1,9 @@
 #!/bin/bash
 # The startup checks: with everything there the window opens as before; with
 # something missing, a dialog lists every check and Close ends the app.
-# Usage: checks.sh <ok|no-sink|no-portal|no-virtual|no-pipewire|x11>
+# Usage: checks.sh <ok|no-portal|no-virtual|no-pipewire|x11>
 #
 #   ok           nothing is missing: no dialog, the main window
-#   no-sink      gtk4paintablesink is not installed; this can only be staged
-#                where the sink comes from build/plugins
 #   no-portal    nothing answers as xdg-desktop-portal
 #   no-virtual   the ScreenCast portal has no virtual source type
 #   no-pipewire  the app is pointed at a PipeWire socket that is not there
@@ -15,15 +13,9 @@
 case "${1:-}" in
   ok | no-portal | no-pipewire | x11) ;;
   no-virtual) export MOCK_SOURCE_TYPES=3 ;;
-  no-sink)
-    if [ -z "${GST_PLUGIN_PATH:-}" ]; then
-      echo "the sink is installed system-wide here; it cannot be hidden" >&2
-      exit 1
-    fi ;;
-  *) sed -n '2,13p' "$0" >&2; exit 1 ;;
+  *) sed -n '2,11p' "$0" >&2; exit 1 ;;
 esac
 [ "$1" = no-portal ] || start_portal "checks-$1"
-[ "$1" = no-sink ] && unset GST_PLUGIN_PATH
 [ "$1" = no-pipewire ] && export PIPEWIRE_REMOTE=pipewire-absent
 app_env=()
 if [ "$1" = x11 ]; then

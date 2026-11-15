@@ -25,8 +25,7 @@ directory under `/tmp` and removes it again.
 
 Needs, by their Ubuntu names: `sway wtype grim pipewire wireplumber
 gstreamer1.0-pipewire gstreamer1.0-tools python3-dbus python3-gi
-libpipewire-0.3-dev gcc pkg-config dbus-daemon`, and `gtk4paintablesink` (see
-the end of this file if the distribution packages none).
+libpipewire-0.3-dev gcc pkg-config dbus-daemon`.
 
 ```
 cargo build
@@ -40,7 +39,7 @@ takes everything down again.
 | Test | What it shows |
 | --- | --- |
 | `tests/loop.sh` | Start, Stop, Start again, close the window while running. Look for the portal conversation (`SelectSources {'types': 4, 'multiple': 0, 'cursor_mode': 2}`), one `Session.Close` per session, the `buffer path` line and exit status 0. Screenshots of each stage are in `out/` |
-| `tests/checks.sh <case>` | The startup checks. `ok`: no dialog, the main window. `no-sink`, `no-portal`, `no-virtual`, `no-pipewire`, `x11`: the dialog with that check failing, the same list in the log, and exit after Close. `x11` runs the app on sway's Xwayland with the environment of an X11 session and needs `xwayland`; it is not an X11 desktop |
+| `tests/checks.sh <case>` | The startup checks. `ok`: no dialog, the main window. `no-portal`, `no-virtual`, `no-pipewire`, `x11`: the dialog with that check failing, the same list in the log, and exit after Close. `x11` runs the app on sway's Xwayland with the environment of an X11 session and needs `xwayland`; it is not an X11 desktop |
 | `tests/failures.sh <case>` | A declined dialog, the window closed while the dialog is open, the stream taken away, a dead PipeWire remote. With `bad-fd` and `not-a-remote` the window freezes, which is a known limitation |
 | `tests/resolution.sh 3440x1440` | The selector on an output of that size: in `out/resolution-idle.png`, the screen's size and which presets are greyed out. Then a preset and a custom size are each started; look for the producer's `negotiated size` lines. A size too large for the output brings the warning and a window scaled down to the room there is. After a restart the window has the size last started, from the settings file it prints. A second argument sets the output's scale |
 | `tests/resize.sh [locked\|unlocked]` | Resizing before Start, with sway resizing the window on request. The fields follow the window (`out/resize-*-idle.png`), a size too large brings the warning (`out/resize-*-too-large.png`), and Start takes the size the window has: look for the producer's `negotiated size: 1100x750` and the picture's white edge in the corner pixels. While it runs the lock decides, read off the picture as in `window-size.sh`. After Stop the window is back at the size it started with and can be resized again |

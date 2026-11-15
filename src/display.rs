@@ -56,6 +56,16 @@ impl Tries {
     }
 }
 
+/// Makes GStreamer ready and registers `gtk4paintablesink`, which is linked
+/// into this binary rather than looked for among the system's plugins. To be
+/// called once at startup, before anything asks for an element.
+pub fn init() -> Result<(), Error> {
+    gst::init()?;
+    gstgtk4::plugin_register_static()?;
+    log::info!("gtk4paintablesink is linked into this binary and registered with GStreamer");
+    Ok(())
+}
+
 /// A running `pipewiresrc ! gtk4paintablesink` pipeline. Dropping it stops
 /// the pipeline.
 pub struct Display {
@@ -412,7 +422,8 @@ unsafe extern "C" fn frame_released(
 
 #[derive(Debug)]
 pub enum Error {
-    /// A GStreamer plugin the pipeline needs is not installed.
+    /// A GStreamer element the pipeline needs cannot be made. `pipewiresrc`
+    /// comes from a plugin of the system's, which may be missing.
     MissingElement(&'static str),
     /// GStreamer itself refused something.
     Gst(String),
@@ -423,7 +434,8 @@ impl fmt::Display for Error {
         match self {
             Self::MissingElement(factory) => write!(
                 f,
-                "GStreamer element `{factory}` not found; see the README for the package that provides it"
+                "GStreamer element `{factory}` not found; the startup checks name the package \
+                 that provides `pipewiresrc`"
             ),
             Self::Gst(message) => write!(f, "GStreamer: {message}"),
         }
