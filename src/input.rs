@@ -144,6 +144,7 @@ impl Relay {
             log::warn!("teleporter: {caveat}");
         }
         let (monitor_x, monitor_y) = (along.0 * frame.0, along.1 * frame.1);
+        let (width, height) = (self.picture.width(), self.picture.height());
         let since = Instant::now();
         let relay = self.clone();
         glib::spawn_future_local(async move {
@@ -152,7 +153,10 @@ impl Relay {
             match result {
                 Ok(()) => log::debug!(
                     "teleporter: a click at {x:.0},{y:.0} of the picture sent the pointer to \
-                     {monitor_x:.0},{monitor_y:.0} of the monitor, {took:.1} ms after the click"
+                     {monitor_x:.0},{monitor_y:.0} of the monitor, {took:.1} ms after the click; \
+                     frames of {}×{} are drawn in an area of {width}×{height}",
+                    frame.0,
+                    frame.1
                 ),
                 Err(err) if !relay.complained.replace(true) => log::warn!(
                     "teleporter: the desktop did not take the pointer at \

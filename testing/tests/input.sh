@@ -1,52 +1,56 @@
 #!/bin/bash
-# The input experiment, MEESEEKS_INPUT, against the mock portal's
-# RemoteDesktop: what the app sends when a pointer comes onto the picture,
-# moves, clicks and scrolls there.
-# Usage: input.sh <teleport|click|forward> [stay|warp|echo|nosize|denied] [locked|unlocked]
+# The teleporter against the mock portal's RemoteDesktop: what the app sends
+# when the picture is clicked, and that it still gives a monitor where remote
+# control cannot be had.
+# Usage: input.sh [stay|warp|nosize|denied|absent|kde] [locked|unlocked]
 #
 # stay    The portal takes every position and only prints it; the cursor stays
 #         in the window. No desktop does that, but it shows everything the app
-#         would pass on.
+#         sends.
 # warp    The portal does what a desktop does with its one cursor: a position
 #         takes the cursor out of the window, onto a second sway output that
 #         stands in for the virtual monitor.
-# echo    The portal takes every position but the cursor stays in the window,
-#         and the buttons and scrolls it is sent land where the cursor is: on
-#         the window, which gets each of them a second time. The app must not
-#         pass that one on again. It passes on one press and one scroll for
-#         each spot the pointer is at, which is why the steps below move the
-#         pointer a little between two of a kind.
 # nosize  Start gives no size for the stream, as GNOME's portal does for a
-#         virtual monitor, and every position is refused for it. The app
-#         sends one for each stay of the pointer, and no button or scroll.
-#         On GNOME itself the app would move the pointer over libei instead;
-#         the mock has none, see gnome/tests/input.sh for that.
+#         virtual monitor, and every position is refused for it. On GNOME
+#         itself the app moves the pointer over libei instead; the mock has
+#         none, see gnome/tests/input.sh for that.
 # denied  Start grants no pointer, as GNOME's dialog does with "Allow Remote
-#         Interaction" left off.
+#         Interaction" left off. The monitor is there; a click sends nothing.
+# absent  The portal has no RemoteDesktop interface. The app opens the plain
+#         ScreenCast session instead, with its one Start.
+# kde     The desktop says it is KDE. The app does not ask for remote control
+#         there and opens the plain ScreenCast session, although this portal
+#         would offer it.
+#
+# In all but `kde` the desktop says it is GNOME, the one the app asks for
+# remote control on.
 #
 # The mouse here is a virtual pointer that is told where to be. A real mouse
 # says how far it moved, so on a desktop the cursor would not come back from
 # the monitor to a spot in the window the way it does here between the steps.
 . "$T/lib.sh"
-usage="usage: input.sh <teleport|click|forward> [stay|warp|echo|nosize|denied] [locked|unlocked]"
-variant=${1:?$usage}
-portal=${2:-stay}
-lock=${3:-locked}
-name=input-$variant-$portal-$lock
+usage="usage: input.sh [stay|warp|nosize|denied|absent|kde] [locked|unlocked]"
+portal=${1:-stay}
+lock=${2:-locked}
+name=input-$portal-$lock
 
 write_settings "width = 1280" "height = 720"
 [ "$lock" = unlocked ] && write_settings "width = 1280" "height = 720" "lock_window_size = false"
+export XDG_CURRENT_DESKTOP=GNOME
+# What a click on the picture is expected to bring.
+expect="a position of that spot"
 case $portal in
   stay) export MOCK_STREAM_SIZE=1280x720 ;;
   warp) export MOCK_STREAM_SIZE=1280x720 MOCK_POINTER_OUTPUT=HEADLESS-2 ;;
-  echo) export MOCK_STREAM_SIZE=1280x720 MOCK_ECHO=$XDG_RUNTIME_DIR/hand ;;
-  nosize) ;;
-  denied) export MOCK_STREAM_SIZE=1280x720 MOCK_DEVICES=0 ;;
+  nosize) expect="a position, refused" ;;
+  denied) export MOCK_STREAM_SIZE=1280x720 MOCK_DEVICES=0; expect="nothing, the pointer was not granted" ;;
+  absent) export MOCK_STREAM_SIZE=1280x720 MOCK_REMOTE=0; expect="nothing, there is no pointer" ;;
+  kde) export MOCK_STREAM_SIZE=1280x720 XDG_CURRENT_DESKTOP=KDE; expect="nothing, there is no pointer" ;;
   *) echo "$usage" >&2; exit 1 ;;
 esac
 start_portal "$name"
 start_pointer "$name"
-MEESEEKS_INPUT=$variant RUST_LOG=info,meeseeks::input=debug "$APP" > "$OUT/$name-app.log" 2>&1 &
+RUST_LOG=info,meeseeks::input=debug "$APP" > "$OUT/$name-app.log" 2>&1 &
 APP_PID=$!
 sleep 2
 
@@ -65,19 +69,15 @@ sent() {
   tail -n +$((seen + 1)) "$OUT/$name-portal.log" | grep -e Notify -e "the cursor" -e refused | sed 's/^/    /'
   seen=$(wc -l < "$OUT/$name-portal.log")
 }
-# Brings the pointer onto a spot of the picture by way of the title bar. A
-# pointer that lands on the window in one jump is told to the app as having
-# entered it, not as having moved, and the app goes by moves alone.
-onto() {
-  hand move $((x + w / 2)) $((y + bar / 2)); hand move $((x + $1)) $((py + $2))
-  # With `click` it takes a click there to send the pointer off.
-  if [ "$variant" = click ]; then hand press 272; hand release 272; fi
-}
+# Brings the pointer onto a spot of the picture by way of the title bar.
+over() { hand move $((x + w / 2)) $((y + bar / 2)); hand move $((x + $1)) $((py + $2)); }
+# The same, and a click with the left button there.
+click() { over "$1" "$2"; hand press 272; hand release 272; }
 read -r x y w h < <(window_rect)
 bar=$((h - 720))
 picture
 
-echo "== the pointer rests on the middle of the window while Start is pressed: nothing, it has not moved"
+echo "== the pointer rests on the middle of the window while Start is pressed: nothing"
 hand move $((x + 640)) $((py + 360))
 press_button; sleep 3
 sent
@@ -86,48 +86,39 @@ swaymsg -q create_output; sleep 0.5
 swaymsg -q output HEADLESS-2 resolution 1280x720; sleep 0.5
 hand move 5 5; sent > /dev/null
 
-echo "== onto the picture at 320,180: a position of 320,180"
-onto 320 180; sent
-if [ "$variant" = click ]; then
-  echo "== on to 640,360 and ten quick moves across the picture, without a click: nothing"
-  hand move $((x + 640)) $((py + 360)); sent
-  for step in 1 2 3 4 5 6 7 8 9 10; do echo "move $((x + 640 + step * 10)) $((py + 360))" >&9; done; sleep 3; sent
-else
-echo "== on to 640,360 if the pointer is still there: forward sends it, teleport has sent the pointer off already"
-hand move $((x + 640)) $((py + 360)); sent
-echo "== ten quick moves to the right, to 740,360: forward sends them, or the newest of those that had to wait"
+echo "== a click on the picture at 320,180: $expect"
+click 320 180; sent
+echo "== over the picture to 640,360 and ten quick moves across it, without a click: nothing"
+over 640 360; sent
 for step in 1 2 3 4 5 6 7 8 9 10; do echo "move $((x + 640 + step * 10)) $((py + 360))" >&9; done; sleep 3; sent
-echo "== left button down and up, the wheel two clicks down, a swipe of 30: forward passes them on if the portal took the position"
-hand press 272; hand release 272; hand wheel 2; hand move $((x + 741)) $((py + 360)); hand swipe 30; sent
-echo "== left button down, then off the picture onto the title bar with it held: forward lets go of it"
-hand press 272; hand move $((x + 640)) $((y + bar / 2)); hand release 272; sent
-fi
-echo "== onto the picture at 1279,719, its last pixel"
-onto 1279 719; sent
+echo "== the right button, the wheel and a swipe on the picture: nothing"
+over 640 360; hand press 273; hand release 273; hand wheel 2; hand swipe 30; sent
+echo "== a click on the picture at 1279,719, its last pixel: $expect"
+click 1279 719; sent
 hand move 5 5; sent > /dev/null
 
 if [ "$lock" = unlocked ]; then
   echo "== the window at half the size: 320,180 of it is 640,360 of the monitor"
   swaymsg -q "[title=\"Meeseeks\"] resize set 640 $((360 + bar))"; sleep 1
   picture
-  onto 320 180; sent
+  click 320 180; sent
   hand move 5 5; sent > /dev/null
   echo "== the window 800 wide: the picture is 640 wide in the middle, with 80 to either side"
   swaymsg -q "[title=\"Meeseeks\"] resize set 800 $((360 + bar))"; sleep 1
   picture
   shot "$name-bands"
   echo "   40,100 is beside the picture: nothing"
-  onto 40 100; sent
+  click 40 100; sent
   echo "   400,180 is its middle: 640,360"
-  onto 400 180; sent
+  click 400 180; sent
   hand move 5 5; sent > /dev/null
   echo "== the window 640 by 560 under the title bar: the picture is 360 high in the middle, with 100 above and below"
   swaymsg -q "[title=\"Meeseeks\"] resize set 640 $((560 + bar))"; sleep 1
   picture
   echo "   320,50 is above the picture: nothing"
-  onto 320 50; sent
+  click 320 50; sent
   echo "   320,280 is its middle: 640,360"
-  onto 320 280; sent
+  click 320 280; sent
   hand move 5 5; sent > /dev/null
 fi
 

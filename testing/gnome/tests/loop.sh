@@ -1,6 +1,8 @@
 #!/bin/bash
-# The whole loop on a real Mutter with the real portal, without the input
-# experiment: start, stop, start again, close the window while running.
+# The whole loop on a real Mutter with the real portal: start, stop, start
+# again, close the window while running. The dialog is answered as it comes,
+# with Allow Remote Interaction left off, so there is a monitor and no
+# pointer; see input.sh for the teleporter.
 . "$T/gnome/lib.sh"
 write_settings "width = 1280" "height = 720"
 start_hands gnome-loop

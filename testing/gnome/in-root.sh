@@ -6,7 +6,7 @@
 # libraries are the newer ones.
 #
 # Usage: in-root.sh <root> <test under testing/> [args...]
-#   in-root.sh /var/tmp/pw-root gnome/tests/input.sh click
+#   in-root.sh /var/tmp/pw-root gnome/tests/input.sh granted
 #
 # SCREEN, SCALE and LAYOUT are passed on to gnome/env.sh, MEESEEKS_TRY to the
 # app. Needs root.

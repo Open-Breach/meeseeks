@@ -20,16 +20,14 @@ virtual monitor. There is no ConnectToEIS and Start gives no mapping id, so
 the app never takes this for a portal to speak libei with.
 
 For RemoteDesktop sessions:
+MOCK_REMOTE=0 leaves the RemoteDesktop interface out, as a desktop whose
+portal has none does.
 MOCK_DEVICES=<bits> is what Start grants of the devices asked for; the default
 is all of them. 0 is a user who leaves remote interaction switched off.
 MOCK_POINTER_OUTPUT=<sway output> makes the mock do what a desktop does with
 its one cursor: a position sent for the stream puts sway's cursor at that spot
-of that output, and a button is pressed or released there. Without it the
-calls are only printed and the cursor stays where it is.
-MOCK_ECHO=<file> is for a desktop that takes a position without moving its
-cursor: the buttons and scrolls it is sent then land where the cursor still
-is. They are written to that file as lines for pointer.py, which does them
-with the test's mouse.
+of that output. Without it the call is only printed and the cursor stays
+where it is.
 """
 
 import json
@@ -339,35 +337,6 @@ class Portal(ScreenCast):
         # on to the desktop without waiting for it.
         GLib.idle_add(self.put_cursor, x, y)
 
-    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}iu", out_signature="")
-    def NotifyPointerButton(self, session_handle, options, button, state):
-        self.pointer_session(session_handle)
-        say(f"NotifyPointerButton {int(button)}", "pressed" if int(state) else "released")
-        GLib.idle_add(self.click_cursor, int(button), int(state))
-        self.echo("press" if int(state) else "release", int(button))
-
-    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}dd", out_signature="")
-    def NotifyPointerAxis(self, session_handle, options, dx, dy):
-        self.pointer_session(session_handle)
-        finish = ", finish" if options.get("finish") else ""
-        say(f"NotifyPointerAxis {float(dx):.1f},{float(dy):.1f}{finish}")
-        if not finish:
-            self.echo("swipe", float(dy))
-
-    @dbus.service.method(REMOTE_DESKTOP, in_signature="oa{sv}ui", out_signature="")
-    def NotifyPointerAxisDiscrete(self, session_handle, options, axis, steps):
-        self.pointer_session(session_handle)
-        say(f"NotifyPointerAxisDiscrete axis {int(axis)}, {int(steps)} steps")
-        if int(axis) == 0:
-            self.echo("wheel", int(steps))
-
-    @staticmethod
-    def echo(*words):
-        path = os.environ.get("MOCK_ECHO")
-        if path:
-            with open(path, "w") as mouse:
-                print(*words, file=mouse)
-
     @staticmethod
     def put_cursor(x, y):
         output = os.environ.get("MOCK_POINTER_OUTPUT")
@@ -382,19 +351,15 @@ class Portal(ScreenCast):
         say(f"the cursor is now at {x:.1f},{y:.1f} of {output}")
         return False
 
-    @staticmethod
-    def click_cursor(button, state):
-        if os.environ.get("MOCK_POINTER_OUTPUT"):
-            action = "press" if state else "release"
-            subprocess.run(["swaymsg", "-q", "seat", "seat0", "cursor", action, str(button)])
-        return False
-
 
 def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     name = dbus.service.BusName(BUS_NAME, bus)  # noqa: F841 (keeps the name)
-    Portal(bus)
+    if os.environ.get("MOCK_REMOTE", "1") == "0":
+        ScreenCast(bus)
+    else:
+        Portal(bus)
     say("ready")
     GLib.MainLoop().run()
 
