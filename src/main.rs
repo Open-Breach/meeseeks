@@ -9,10 +9,12 @@ mod display;
 mod environment;
 mod mirror;
 mod options;
+mod pictograms;
 mod renderer;
 mod selector;
 mod session;
 mod settings;
+mod style;
 
 use std::cell::{Cell, RefCell};
 use std::error::Error;
@@ -493,6 +495,7 @@ fn activate(
     environment: &Environment,
     restart: Rc<Cell<bool>>,
 ) {
+    style::load();
     let asked = environment.asked;
     let overridden = options::Overridden {
         renderer: environment.renderer_overridden,
