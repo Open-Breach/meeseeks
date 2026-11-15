@@ -2,7 +2,7 @@
 version: 1
 slug: "src-main-rs"
 primary_target: "src/main.rs"
-related_targets: ["src/selector.rs","src/options.rs","src/checks_dialog.rs"]
+related_targets: ["src/selector.rs","src/options.rs","src/checks_dialog.rs","src/style.rs","src/pictograms.rs"]
 ---
 
 # Meeseeks window and dialogs
@@ -17,7 +17,11 @@ Direction round, 2026-11-14: four sketches were shown (Wayfinding, Size chart, G
 
 Mock-up review, 2026-11-14: Serge approved everything except the Start button, in his words "can we make the round button mutch cooler like more 3d look with visual feedback everithing els is greate". Start was redrawn as a raised push button; its states are on the Figma board "Start button · states and feedback".
 
-Status: mock-ups are in Figma (https://www.figma.com/design/uXzAlU04u3O3OMb6bVaZK8, page "Redesign"). The GTK build has not started.
+Approval, 2026-11-14: on the reworked button Serge wrote "yes its aprooved designe it in its own branch". The mock-ups in Figma are the approved comps.
+
+Status, 2026-11-15: built in GTK on the branch `claude/charming-cori-1w7kav` (`src/style.rs`, `src/selector.rs`, `src/main.rs`, `src/options.rs`, `src/checks_dialog.rs`, `src/pictograms.rs`). Mock-ups: https://www.figma.com/design/uXzAlU04u3O3OMb6bVaZK8, page "Redesign". The build has been run only in the repo's headless test desktop (sway, GTK 4.14, its default theme), never on GNOME or KDE.
+
+Where the build knowingly differs from the mock-ups: the list takes its natural width instead of a fixed 560 px; the chosen preset keeps the weight of the others, so that choosing does not shift the row; the drop-down's arrow is the desktop theme's; the system font at relative sizes stands where the mock-ups have Inter.
 
 ## Direction contract
 
@@ -35,6 +39,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 ## Unresolved
 
-- How the window looks under a dark desktop theme and under Breeze on KDE; neither has been rendered.
-- The raised Start button in GTK CSS (gradients, box-shadows, a transform and a transition) has not been tried; it also has to follow the desktop's setting for reduced animation.
-- New copy to confirm with the mock-ups: the line about greyed-out sizes, the line under Start, the reworded fit warning, the "Experimental" group in the options.
+- How the window looks on GNOME and on KDE Plasma (Breeze); neither has been rendered. Under GTK's dark variant the title bar goes dark and the app's own surfaces stay light: there is no dark palette yet.
+- The title bars of the dialogs are the desktop's and are not drawn in the test desktop, so they have not been seen with the new dialogs.
+- The motion of the Start button (rise, sink, spring back) has been seen only as still frames. GTK drops style transitions when the desktop turns animations off; that has not been tried either.
