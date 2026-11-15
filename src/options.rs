@@ -1,5 +1,6 @@
-//! The options dialog: the renderer, the experimental switches and the window
-//! lock. What it saves takes effect when the app has been started again.
+//! The options dialog: the renderer and the window lock in one list, the
+//! experimental switches in another. What it saves takes effect when the app
+//! has been started again.
 
 use std::io;
 use std::rc::Rc;
@@ -7,6 +8,7 @@ use std::rc::Rc;
 use gtk::gio;
 use gtk::prelude::*;
 
+use crate::pictograms;
 use crate::renderer::Renderer;
 use crate::settings::Settings;
 
@@ -18,7 +20,13 @@ const RENDERERS: [(Renderer, &str); 3] = [
 ];
 
 /// How wide the descriptions run before they wrap, in characters.
-const DESCRIPTION_WIDTH: i32 = 46;
+const DESCRIPTION_WIDTH: i32 = 48;
+
+/// What is said beside a setting that an environment variable stands in for.
+const RENDERER_OVERRIDDEN: &str = "GSK_RENDERER is set in the environment. This run uses it \
+                                   instead of the renderer chosen here.";
+const TRIES_OVERRIDDEN: &str = "MEESEEKS_TRY is set in the environment. This run uses it \
+                                instead of the two switches here.";
 
 /// Which settings an environment variable is used instead of in this run.
 #[derive(Clone, Copy)]
@@ -82,94 +90,79 @@ pub fn show(
     });
     controls.show(settings);
 
-    let grid = gtk::Grid::builder()
-        .column_spacing(24)
-        .row_spacing(12)
-        .build();
-    let mut row = 0;
-    let mut add = |title: &str, description: &str, control: &gtk::Widget| {
-        let text = gtk::Box::new(gtk::Orientation::Vertical, 2);
-        text.append(&gtk::Label::builder().label(title).xalign(0.0).build());
-        text.append(&note(description, "dim-label"));
-        text.set_hexpand(true);
-        control.set_halign(gtk::Align::End);
-        control.set_valign(gtk::Align::Center);
-        grid.attach(&text, 0, row, 1, 1);
-        grid.attach(control, 1, row, 1, 1);
-        row += 1;
-    };
-    add(
+    let general = list();
+    general.append(&row(
         "Renderer",
         "What GTK draws the window with.",
-        controls.renderer.upcast_ref(),
-    );
-    add(
-        "Copy frames",
-        "Experimental. Take the frames as shared memory only, never as \
-         DMA-BUF, and copy each one. Same as MEESEEKS_TRY=copy.",
-        controls.copy.upcast_ref(),
-    );
-    add(
-        "Present as sRGB",
-        "Experimental. Tell GTK the frames are plain sRGB, whatever the \
-         stream says. Same as MEESEEKS_TRY=srgb.",
-        controls.srgb.upcast_ref(),
-    );
-    add(
+        overridden.renderer.then_some(RENDERER_OVERRIDDEN),
+        &controls.renderer,
+    ));
+    general.append(&row(
         "Lock window size",
         "The window keeps the size of the virtual monitor, so the picture \
          is never scaled.",
-        controls.lock.upcast_ref(),
-    );
-    if overridden.renderer {
-        grid.attach(
-            &note(
-                "GSK_RENDERER is set in the environment. This run uses it \
-                 instead of the renderer chosen here.",
-                "warning",
-            ),
-            0,
-            row,
-            2,
-            1,
-        );
-        row += 1;
-    }
-    if overridden.tries {
-        grid.attach(
-            &note(
-                "MEESEEKS_TRY is set in the environment. This run uses it \
-                 instead of the two experimental switches here.",
-                "warning",
-            ),
-            0,
-            row,
-            2,
-            1,
-        );
-    }
+        None,
+        &controls.lock,
+    ));
 
-    let reset = gtk::Button::with_mnemonic("_Reset to defaults");
-    let cancel = gtk::Button::with_mnemonic("_Cancel");
-    let save_button = gtk::Button::with_mnemonic("_Save");
-    save_button.add_css_class("suggested-action");
+    let heading = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .margin_start(4)
+        .build();
+    heading.append(
+        &gtk::Label::builder()
+            .label("Experimental")
+            .xalign(0.0)
+            .css_classes(["mk-heading"])
+            .build(),
+    );
+    if overridden.tries {
+        heading.append(&overridden_note(TRIES_OVERRIDDEN));
+    }
+    let tries = list();
+    tries.append(&row(
+        "Copy frames",
+        "Take the frames as shared memory only, never as DMA-BUF, and copy \
+         each one. Same as MEESEEKS_TRY=copy.",
+        None,
+        &controls.copy,
+    ));
+    tries.append(&row(
+        "Present as sRGB",
+        "Tell GTK the frames are plain sRGB, whatever the stream says. Same \
+         as MEESEEKS_TRY=srgb.",
+        None,
+        &controls.srgb,
+    ));
+    let experimental = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    experimental.append(&heading);
+    experimental.append(&tries);
+
+    let reset = button("_Reset to defaults", false);
+    let cancel = button("_Cancel", false);
+    let save_button = button("_Save", true);
     reset.set_hexpand(true);
     reset.set_halign(gtk::Align::Start);
-    let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     buttons.append(&reset);
     buttons.append(&cancel);
     buttons.append(&save_button);
 
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
-        .spacing(18)
-        .margin_top(18)
-        .margin_bottom(18)
-        .margin_start(18)
-        .margin_end(18)
+        .spacing(20)
+        .margin_top(24)
+        .margin_bottom(24)
+        .margin_start(24)
+        .margin_end(24)
         .build();
-    content.append(&grid);
+    content.append(&general);
+    content.append(&experimental);
     content.append(&buttons);
+    // The margins belong to the content; the colour has to reach the edges.
+    let ground = gtk::Box::builder().css_classes(["mk-dialog"]).build();
+    ground.append(&content);
 
     let dialog = gtk::Window::builder()
         .title("Options")
@@ -177,7 +170,7 @@ pub fn show(
         .modal(true)
         .destroy_with_parent(true)
         .resizable(false)
-        .child(&content)
+        .child(&ground)
         .build();
 
     let resetting = controls.clone();
@@ -234,8 +227,61 @@ pub fn show(
     dialog.present();
 }
 
+/// A white card for rows.
+fn list() -> gtk::Box {
+    // Hidden overflow has the rows follow the card's rounded corners.
+    gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .css_classes(["mk-list"])
+        .overflow(gtk::Overflow::Hidden)
+        .build()
+}
+
+/// One setting: what it is called and what it does on the left, its control
+/// on the right. `note` goes under the description.
+fn row(
+    title: &str,
+    description: &str,
+    note: Option<&str>,
+    control: &(impl IsA<gtk::Widget> + IsA<gtk::Accessible>),
+) -> gtk::Box {
+    let title = gtk::Label::builder().label(title).xalign(0.0).build();
+    let description = small(description, "mk-dim");
+    control.update_relation(&[
+        gtk::accessible::Relation::LabelledBy(&[title.upcast_ref()]),
+        gtk::accessible::Relation::DescribedBy(&[description.upcast_ref()]),
+    ]);
+    let text = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(2)
+        .hexpand(true)
+        .build();
+    text.append(&title);
+    text.append(&description);
+    if let Some(note) = note {
+        text.append(&overridden_note(note));
+    }
+    control.set_halign(gtk::Align::End);
+    control.set_valign(gtk::Align::Center);
+    let row = gtk::Box::builder()
+        .spacing(16)
+        .css_classes(["mk-row"])
+        .build();
+    row.append(&text);
+    row.append(control);
+    row
+}
+
+/// A warning sign and a line that says an environment variable is in the way.
+fn overridden_note(text: &str) -> gtk::Box {
+    let note = gtk::Box::builder().spacing(8).margin_top(4).build();
+    note.append(&pictograms::warning());
+    note.append(&small(text, "mk-warning"));
+    note
+}
+
 /// A line of small print that wraps.
-fn note(text: &str, class: &str) -> gtk::Label {
+fn small(text: &str, class: &str) -> gtk::Label {
     // A wrapping label has to be told its width, or the dialog comes out as
     // tall as the text would be in a narrow column.
     gtk::Label::builder()
@@ -244,6 +290,16 @@ fn note(text: &str, class: &str) -> gtk::Label {
         .wrap(true)
         .width_chars(DESCRIPTION_WIDTH)
         .max_width_chars(DESCRIPTION_WIDTH)
-        .css_classes([class])
+        .css_classes([class, "mk-caption"])
         .build()
+}
+
+/// A button of the dialog; `suggested` for the one that goes ahead.
+fn button(label: &str, suggested: bool) -> gtk::Button {
+    let button = gtk::Button::with_mnemonic(label);
+    button.add_css_class("mk-button");
+    if suggested {
+        button.add_css_class("mk-suggested");
+    }
+    button
 }
