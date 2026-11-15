@@ -62,7 +62,7 @@ Top to bottom:
 8. AI-written code warning — **fixed**, copied verbatim from Rick's README
 9. Join in — **fixed**, copied verbatim from Rick's README
 
-Licence as a line at the bottom.
+Then the licence as one line, and below it, as the last thing on the page, the app logo: `assets/icon/meeseeks-icon.png`, centred, 160 px wide.
 
 ### Agent rules
 
