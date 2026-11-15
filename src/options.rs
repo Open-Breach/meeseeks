@@ -26,7 +26,7 @@ const DESCRIPTION_WIDTH: i32 = 48;
 const RENDERER_OVERRIDDEN: &str = "GSK_RENDERER is set in the environment. This run uses it \
                                    instead of the renderer chosen here.";
 const TRIES_OVERRIDDEN: &str = "MEESEEKS_TRY is set in the environment. This run uses it \
-                                instead of the two switches here.";
+                                instead of the switch here.";
 
 /// Which settings an environment variable is used instead of in this run.
 #[derive(Clone, Copy)]
@@ -38,7 +38,6 @@ pub struct Overridden {
 struct Controls {
     renderer: gtk::DropDown,
     copy: gtk::Switch,
-    srgb: gtk::Switch,
     lock: gtk::Switch,
 }
 
@@ -50,7 +49,6 @@ impl Controls {
             .unwrap_or(0);
         self.renderer.set_selected(position as u32);
         self.copy.set_active(settings.try_copy);
-        self.srgb.set_active(settings.try_srgb);
         self.lock.set_active(settings.lock_window_size);
     }
 
@@ -62,7 +60,6 @@ impl Controls {
         Settings {
             renderer,
             try_copy: self.copy.is_active(),
-            try_srgb: self.srgb.is_active(),
             lock_window_size: self.lock.is_active(),
             ..settings.clone()
         }
@@ -85,7 +82,6 @@ pub fn show(
     let controls = Rc::new(Controls {
         renderer: gtk::DropDown::from_strings(&labels),
         copy: gtk::Switch::new(),
-        srgb: gtk::Switch::new(),
         lock: gtk::Switch::new(),
     });
     controls.show(settings);
@@ -127,13 +123,6 @@ pub fn show(
          each one. Same as MEESEEKS_TRY=copy.",
         None,
         &controls.copy,
-    ));
-    tries.append(&row(
-        "Present as sRGB",
-        "Tell GTK the frames are plain sRGB, whatever the stream says. Same \
-         as MEESEEKS_TRY=srgb.",
-        None,
-        &controls.srgb,
     ));
     let experimental = gtk::Box::new(gtk::Orientation::Vertical, 8);
     experimental.append(&heading);
