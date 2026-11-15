@@ -15,11 +15,12 @@ A Linux app that creates a virtual monitor through the XDG ScreenCast portal and
 ## Layout
 
 - `src/session.rs` — the portal session: ScreenCast, source type Virtual, cursor mode Embedded, returns the PipeWire fd and node id. On GNOME it is a RemoteDesktop session with that screen cast in it, which also grants the pointer if the user allows it; one dialog either way. No GTK or GStreamer imports.
-- `src/display.rs` — the GStreamer pipeline and the paintable it exposes. No portal imports.
-- `src/main.rs` — one GTK 4 window: the resolution selector while idle, the picture and a Stop button in the title bar while running. Runs the startup checks first.
+- `src/display.rs` — the GStreamer pipeline and the paintable it exposes; hands out the current frame as a texture. No portal imports, and nothing of files or folders.
+- `src/main.rs` — one GTK 4 window: the resolution selector while idle, the picture with a Stop button and the screenshot button in the title bar while running. Runs the startup checks first.
 - `src/selector.rs` — the resolution selector: presets, custom size, fit check, Start button.
 - `src/style.rs` — the app's GTK style sheet: the colours, the lists on white cards, the linked presets, the raised Start button. It styles only widgets marked with the app's own `mk-` classes; title bars stay the desktop theme's.
-- `src/pictograms.rs` — the pictograms the app draws itself: the marks of the startup checks, the warning sign, the move-back sign.
+- `src/pictograms.rs` — the pictograms the app draws itself: the marks of the startup checks, the warning sign, the move-back sign, the screenshot button's camera.
+- `src/screenshot.rs` — the screenshot button and the file it saves: a PNG in `Meeseeks` in the user's Pictures folder, named after the date and time. No pipeline or portal imports.
 - `src/settings.rs` — the settings file, `~/.config/meeseeks/settings.toml`. No GTK imports.
 - `src/mirror.rs` — tells when the window is on its own virtual monitor, which is any monitor that appeared after Start.
 - `src/options.rs` — the options dialog. Saving restarts the app.

@@ -8,8 +8,8 @@
 # Usage: in-root.sh <root> <test under testing/> [args...]
 #   in-root.sh /var/tmp/pw-root gnome/tests/input.sh granted
 #
-# SCREEN, SCALE and LAYOUT are passed on to gnome/env.sh, MEESEEKS_TRY to the
-# app. Needs root.
+# SCREEN, SCALE and LAYOUT are passed on to gnome/env.sh, MEESEEKS_TRY and
+# GSK_RENDERER to the app. Needs root.
 #
 # On top of what make-root.sh puts into the root, it needs:
 #   chroot <root> apt-get install -y --no-install-recommends mutter \
@@ -48,4 +48,5 @@ mount_into_root --bind "$T/.." "$IN_ROOT"
 chroot "$ROOT" /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root \
   SCREEN="${SCREEN:-1600x1000}" SCALE="${SCALE:-0}" LAYOUT="${LAYOUT:-}" \
   ${MEESEEKS_TRY:+MEESEEKS_TRY="$MEESEEKS_TRY"} \
+  ${GSK_RENDERER:+GSK_RENDERER="$GSK_RENDERER"} \
   "$IN_ROOT/testing/gnome/env.sh" "$IN_ROOT/testing/$TEST" "$@"
