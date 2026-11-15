@@ -3,66 +3,83 @@
 use gtk::prelude::*;
 
 use crate::checks::{self, Check, Status};
+use crate::pictograms;
 
 /// How wide the hints run before they wrap, in characters.
-const HINT_WIDTH: i32 = 64;
+const HINT_WIDTH: i32 = 68;
 
-/// Shows the results, one line per check. Closing the dialog ends the
+/// Shows the results, one row per check. Closing the dialog ends the
 /// application, since it is its only window.
 pub fn show(app: &gtk::Application, checks: &[Check]) {
     let heading = gtk::Label::builder()
         .label("This system lacks something Meeseeks needs.")
         .xalign(0.0)
-        .css_classes(["heading"])
+        .wrap(true)
+        .css_classes(["mk-title-2"])
         .build();
 
-    let list = gtk::Grid::builder()
-        .column_spacing(10)
-        .row_spacing(2)
+    // Hidden overflow has the rows follow the list's rounded corners.
+    let list = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .css_classes(["mk-list"])
+        .overflow(gtk::Overflow::Hidden)
         .build();
-    let mut row = 0;
     for check in checks {
-        let (mark, class) = match check.status {
-            Status::Pass => ("✓", "success"),
-            Status::Warn => ("!", "warning"),
-            Status::Fail => ("✗", "error"),
+        let mark = match check.status {
+            Status::Pass => pictograms::pass(),
+            Status::Warn => pictograms::warning(),
+            Status::Fail => pictograms::fail(),
         };
-        let mark = gtk::Label::builder()
-            .label(mark)
-            .css_classes([class])
-            .margin_top(6)
-            .build();
-        let name = gtk::Label::builder()
-            .label(&check.name)
-            .xalign(0.0)
+        let text = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(2)
             .hexpand(true)
-            .margin_top(6)
             .build();
-        list.attach(&mark, 0, row, 1, 1);
-        list.attach(&name, 1, row, 1, 1);
-        row += 1;
+        text.append(
+            &gtk::Label::builder()
+                .label(&check.name)
+                .xalign(0.0)
+                .wrap(true)
+                .build(),
+        );
         if let Some(hint) = &check.hint {
             // A wrapping label has to be told its width, or the window
             // comes out as tall as the text would be in a narrow column.
-            let hint = gtk::Label::builder()
-                .label(hint)
-                .xalign(0.0)
-                .wrap(true)
-                .width_chars(HINT_WIDTH)
-                .max_width_chars(HINT_WIDTH)
-                .selectable(true)
-                .css_classes(["dim-label"])
-                .build();
-            list.attach(&hint, 1, row, 1, 1);
-            row += 1;
+            text.append(
+                &gtk::Label::builder()
+                    .label(hint)
+                    .xalign(0.0)
+                    .wrap(true)
+                    .width_chars(HINT_WIDTH)
+                    .max_width_chars(HINT_WIDTH)
+                    .selectable(true)
+                    .css_classes(["mk-dim", "mk-caption"])
+                    .build(),
+            );
         }
+        let row = gtk::Box::builder()
+            .spacing(12)
+            .css_classes(["mk-row"])
+            .build();
+        // The check that stops the app is found without reading every row.
+        if check.status == Status::Fail {
+            row.add_css_class("mk-failed");
+        }
+        row.append(&mark);
+        row.append(&text);
+        list.append(&row);
     }
 
-    let copy = gtk::Button::with_label("Copy report");
-    let close = gtk::Button::with_label("Close");
+    let copy = gtk::Button::builder()
+        .label("Copy report")
+        .css_classes(["mk-button"])
+        .build();
+    let close = gtk::Button::builder()
+        .label("Close")
+        .css_classes(["mk-button", "mk-suggested"])
+        .build();
     let buttons = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(6)
+        .spacing(8)
         .halign(gtk::Align::End)
         .build();
     buttons.append(&copy);
@@ -70,21 +87,24 @@ pub fn show(app: &gtk::Application, checks: &[Check]) {
 
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
-        .spacing(12)
-        .margin_top(18)
-        .margin_bottom(18)
-        .margin_start(18)
-        .margin_end(18)
+        .spacing(16)
+        .margin_top(24)
+        .margin_bottom(24)
+        .margin_start(24)
+        .margin_end(24)
         .build();
     content.append(&heading);
     content.append(&list);
     content.append(&buttons);
+    // The margins belong to the content; the colour has to reach the edges.
+    let ground = gtk::Box::builder().css_classes(["mk-dialog"]).build();
+    ground.append(&content);
 
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Meeseeks cannot start")
         .resizable(false)
-        .child(&content)
+        .child(&ground)
         .build();
 
     let report = checks::report(checks);

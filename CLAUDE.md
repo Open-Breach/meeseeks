@@ -18,6 +18,8 @@ A Linux app that creates a virtual monitor through the XDG ScreenCast portal and
 - `src/display.rs` — the GStreamer pipeline and the paintable it exposes. No portal imports.
 - `src/main.rs` — one GTK 4 window: the resolution selector while idle, the picture and a Stop button in the title bar while running. Runs the startup checks first.
 - `src/selector.rs` — the resolution selector: presets, custom size, fit check, Start button.
+- `src/style.rs` — the app's GTK style sheet: the colours, the lists on white cards, the linked presets, the raised Start button. It styles only widgets marked with the app's own `mk-` classes; title bars stay the desktop theme's.
+- `src/pictograms.rs` — the pictograms the app draws itself: the marks of the startup checks, the warning sign, the move-back sign.
 - `src/settings.rs` — the settings file, `~/.config/meeseeks/settings.toml`. No GTK imports.
 - `src/mirror.rs` — tells when the window is on its own virtual monitor, which is any monitor that appeared after Start.
 - `src/options.rs` — the options dialog. Saving restarts the app.
